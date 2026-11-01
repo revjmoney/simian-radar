@@ -4,6 +4,8 @@
 static const uint32_t kReportEveryMs = 2UL * 60UL * 1000UL;
 static const uint32_t kKarmaWindowMs = 60000;
 static const uint32_t kSpamWindowMs = 10000;
+static const uint32_t kSpamSettleMs = 3000;  // a real device repeats its address within this
+static const uint32_t kTwinWindowMs = 3UL * 60UL * 1000UL;
 static const uint8_t kPwnagotchi[6] = {0xde, 0xad, 0xbe, 0xef, 0xde, 0xad};
 
 const char* attackName(AttackKind k) {
@@ -73,25 +75,41 @@ void AttackDetector::onWifi(const WifiFrame& f, uint32_t now) {
   if ((f.subtype == kWifiBeacon || f.subtype == kWifiProbeResp) && f.hasSsid && f.ssid[0]) {
     // Evil twin: the same network name from two different makers, one open and one secured.
     uint32_t h = fnvStr(f.ssid);
+    // Both sides must be on the air within a few minutes of each other: a generic name like
+    // "linksys" heard open here and secured miles later is two unrelated networks.
     Twin* t = nullptr;
-    for (auto& x : twins_)
+    Twin* oldest = &twins_[0];
+    for (auto& x : twins_) {
       if (x.used && x.ssidHash == h) { t = &x; break; }
+      if (!x.used) { if (oldest->used) oldest = &x; }
+      else if (oldest->used && (int32_t)(x.lastMs - oldest->lastMs) < 0) oldest = &x;
+    }
     if (!t) {
-      t = &twins_[h % (sizeof twins_ / sizeof twins_[0])];
+      t = oldest;
       *t = Twin{};
       t->used = true;
       t->ssidHash = h;
       strncpy(t->ssid, f.ssid, sizeof t->ssid - 1);
     }
+    t->lastMs = now;
     int idx = -1;
     for (int i = 0; i < t->n; i++)
       if (memcmp(t->oui[i], f.a2, 3) == 0) idx = i;
-    if (idx < 0 && t->n < 4) {
-      idx = t->n++;
+    if (idx >= 0) {
+      t->ouiMs[idx] = now;
+    } else {
+      if (t->n < 4) {
+        idx = t->n++;
+      } else {
+        idx = 0;
+        for (int i = 1; i < 4; i++)
+          if ((int32_t)(t->ouiMs[i] - t->ouiMs[idx]) < 0) idx = i;
+      }
       memcpy(t->oui[idx], f.a2, 3);
       t->open[idx] = f.open;
+      t->ouiMs[idx] = now;
       for (int i = 0; i < t->n; i++)
-        if (i != idx && t->open[i] != t->open[idx]) {
+        if (i != idx && t->open[i] != t->open[idx] && now - t->ouiMs[i] <= kTwinWindowMs) {
           raise(AttackKind::EvilTwin, f.a2, t->ssid, now);
           break;
         }
@@ -144,24 +162,33 @@ static bool isPopupAdvert(const BleAdv& a) {
 void AttackDetector::onBle(const BleAdv& a, uint32_t now) {
   if (a.name && strncmp(a.name, "Flipper ", 8) == 0) raise(AttackKind::Flipper, a.addr, a.name, now);
   if (!isPopupAdvert(a)) return;
-  // Popup spam: lots of different "devices" asking to pair within a few seconds.
-  spam_[spamNext_] = {fnv(a.addr, 6), now};
-  spamNext_ = (spamNext_ + 1) % (sizeof spam_ / sizeof spam_[0]);
-  uint32_t distinct[sizeof spam_ / sizeof spam_[0]];
-  size_t n = 0;
-  for (const auto& s : spam_) {
-    if (!s.ms || now - s.ms > kSpamWindowMs) continue;
-    bool dup = false;
-    for (size_t i = 0; i < n; i++) dup |= distinct[i] == s.addrHash;
-    if (!dup) distinct[n++] = s.addrHash;
+  // Popup spam tools use a fresh address for nearly every advert; real earbuds keep repeating
+  // theirs. Remember how often each address has been heard.
+  uint32_t h = fnv(a.addr, 6);
+  Spam* oldest = &spam_[0];
+  for (auto& s : spam_) {
+    if (s.count && s.addrHash == h) {
+      if (s.count < 0xFFFF) s.count++;
+      return;
+    }
+    if (!s.count) { if (oldest->count) oldest = &s; }
+    else if (oldest->count && (int32_t)(s.firstMs - oldest->firstMs) < 0) oldest = &s;
   }
-  if (n >= kSpamAddresses) {
-    raise(AttackKind::BleSpam, a.addr, nullptr, now);
+  *oldest = {h, now, 1};
+}
+
+void AttackDetector::checkSpam(uint32_t now) {
+  size_t once = 0;
+  for (const auto& s : spam_)
+    once += s.count == 1 && now - s.firstMs >= kSpamSettleMs && now - s.firstMs <= kSpamWindowMs;
+  if (once >= kSpamAddresses) {
+    raise(AttackKind::BleSpam, nullptr, nullptr, now);
     memset(spam_, 0, sizeof spam_);
   }
 }
 
 bool AttackDetector::poll(uint32_t now, AttackEvent* out) {
+  checkSpam(now);
   while (nPending_) {
     AttackEvent e = pending_[0];
     memmove(pending_, pending_ + 1, --nPending_ * sizeof pending_[0]);

@@ -77,7 +77,7 @@ void SkyGuard::tick(uint32_t now, bool hasFix) {
   if (jammed && (!jamEver_ || now - lastJamMs_ >= kRepeatMs)) {
     jamEver_ = true;
     lastJamMs_ = now;
-    pending_ = "GPS JAMMING?";
+    pending_ = "JAMMING?";
   }
 }
 
@@ -92,12 +92,16 @@ void SkyGuard::onFix(const Fix& f, uint32_t now) {
     }
     if (f.unixTime && prev_.unixTime) {
       double clock = (double)(int32_t)(f.unixTime - prev_.unixTime);
-      spoof |= clock - dt > kClockSlackS || dt - clock > kClockSlackS;
+      // A clock off by a whole day is the receiver reporting the new time before the new date
+      // (GGA arrives before RMC at midnight UTC), not spoofing.
+      double err = clock - dt;
+      bool dayLag = err > -86400 - kClockSlackS && err < -86400 + kClockSlackS;
+      spoof |= !dayLag && (err > kClockSlackS || -err > kClockSlackS);
     }
     if (spoof && (!spoofEver_ || now - lastSpoofMs_ >= kRepeatMs)) {
       spoofEver_ = true;
       lastSpoofMs_ = now;
-      pending_ = "GPS SPOOFING?";
+      pending_ = "SPOOFING?";
     }
   }
   prev_ = f;

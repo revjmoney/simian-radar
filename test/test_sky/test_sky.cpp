@@ -55,7 +55,7 @@ void test_jamming_when_strong_sats_drop() {
     g.tick(s * 1000, false);
   }
   TEST_ASSERT_TRUE(g.poll(20000, &t));
-  TEST_ASSERT_EQUAL_STRING("GPS JAMMING?", t);
+  TEST_ASSERT_EQUAL_STRING("JAMMING?", t);
 }
 void test_no_jamming_when_indoors_from_start() {
   SkyGuard g;
@@ -83,7 +83,7 @@ void test_spoof_on_position_jump() {
   g.onFix(fixAt(33.7000, -78.9000, 1000), 1000);
   g.onFix(fixAt(33.7100, -78.9000, 1001), 2000);  // 1.1 km in 1 s
   TEST_ASSERT_TRUE(g.poll(2000, &t));
-  TEST_ASSERT_EQUAL_STRING("GPS SPOOFING?", t);
+  TEST_ASSERT_EQUAL_STRING("SPOOFING?", t);
 }
 void test_spoof_on_clock_jump() {
   SkyGuard g;
@@ -104,6 +104,13 @@ void test_no_spoof_after_long_gap() {
   g.onFix(fixAt(33.7, -78.9, 1000), 1000);
   g.onFix(fixAt(33.8, -78.9, 1600), 601000);  // 11 km after 10 minutes in a tunnel: fine
   TEST_ASSERT_FALSE(g.poll(601000, &t));
+}
+void test_no_spoof_on_midnight_date_lag() {
+  SkyGuard g;
+  const char* t;
+  g.onFix(fixAt(33.7, -78.9, 1793491199), 1000);          // 23:59:59
+  g.onFix(fixAt(33.7, -78.9, 1793491200 - 86400), 2000);  // new time, date not updated yet
+  TEST_ASSERT_FALSE(g.poll(2000, &t));
 }
 void test_alert_once_per_2min() {
   SkyGuard g;
@@ -128,6 +135,7 @@ int main() {
   RUN_TEST(test_spoof_on_clock_jump);
   RUN_TEST(test_no_spoof_on_normal_drive);
   RUN_TEST(test_no_spoof_after_long_gap);
+  RUN_TEST(test_no_spoof_on_midnight_date_lag);
   RUN_TEST(test_alert_once_per_2min);
   return UNITY_END();
 }

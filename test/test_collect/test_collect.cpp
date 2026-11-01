@@ -123,6 +123,14 @@ void test_tags_only_trackers_and_glasses() {
   TEST_ASSERT_EQUAL_UINT(2, c.tags(s, 4, 1000));
 }
 
+void test_seen_table_clear() {
+  SeenTable<4> t;
+  uint8_t k[6] = {1, 2, 3, 4, 5, 6};
+  t.upsert(k, -50, 1000);
+  t.clear();
+  TEST_ASSERT_EQUAL_UINT(0, t.size());
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_phone_from_probe_req);
@@ -137,5 +145,6 @@ int main() {
   RUN_TEST(test_list_strongest_first_and_expiry);
   RUN_TEST(test_bodycam_ble);
   RUN_TEST(test_tags_only_trackers_and_glasses);
+  RUN_TEST(test_seen_table_clear);
   return UNITY_END();
 }

@@ -13,6 +13,7 @@ struct Decoded {
 };
 
 static void decodeOne(const uint8_t* msg, Decoded* out) {
+  if ((msg[0] >> 4) == kPackType) return;  // a pack inside a pack: the decoder would read past this slot
   static ODID_UAS_Data uas;  // ~1 KB: keep it off the stack
   memset(&uas, 0, sizeof uas);
   switch (decodeOpenDroneID(&uas, msg)) {

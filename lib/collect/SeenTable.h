@@ -56,6 +56,7 @@ class SeenTable {
     for (const auto& r : rows_) n += r.used && now - r.lastMs <= expireMs;
     return n;
   }
+  void clear() { memset(rows_, 0, sizeof rows_); }
   size_t size() const {
     size_t n = 0;
     for (const auto& r : rows_) n += r.used;

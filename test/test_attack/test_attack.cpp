@@ -59,6 +59,13 @@ void test_two_secured_makers_not_evil_twin() {
   d.onWifi(mgmt(kWifiBeacon, kRogue, "Office", false), 1100);
   TEST_ASSERT_FALSE(d.poll(1100, &e));
 }
+void test_evil_twin_needs_both_heard_close_together() {
+  AttackDetector d;
+  AttackEvent e;
+  d.onWifi(mgmt(kWifiBeacon, kAp, "linksys", true), 1000);
+  d.onWifi(mgmt(kWifiBeacon, kRogue, "linksys", false), 1000 + 10 * 60000);  // ten minutes and miles later
+  TEST_ASSERT_FALSE(d.poll(1000 + 10 * 60000, &e));
+}
 void test_karma_5_ssids() {
   AttackDetector d;
   AttackEvent e;
@@ -99,15 +106,30 @@ void test_ble_spam_many_addresses() {
   BleAdv a = {};
   a.mfg = m;
   a.mfgLen = sizeof m;
-  for (int i = 0; i < 19; i++) {
+  for (int i = 0; i < 19; i++) {  // each fake "device" is heard once and never again
     a.addr[5] = (uint8_t)i;
     d.onBle(a, 1000 + i * 100);
   }
-  TEST_ASSERT_FALSE(d.poll(3000, &e));
+  TEST_ASSERT_FALSE(d.poll(5000, &e));
   a.addr[5] = 99;
   d.onBle(a, 3000);
-  TEST_ASSERT_TRUE(d.poll(3000, &e));
+  TEST_ASSERT_TRUE(d.poll(6000, &e));
   TEST_ASSERT_EQUAL_INT((int)AttackKind::BleSpam, (int)e.kind);
+}
+void test_crowd_of_airpods_not_spam() {
+  AttackDetector d;
+  AttackEvent e;
+  const uint8_t m[] = {0x4C, 0x00, 0x07, 0x19, 0x01};
+  BleAdv a = {};
+  a.mfg = m;
+  a.mfgLen = sizeof m;
+  for (uint32_t t = 0; t < 10000; t += 1000)  // 40 real devices, each repeating every second
+    for (int i = 0; i < 40; i++) {
+      a.addr[4] = 1;
+      a.addr[5] = (uint8_t)i;
+      d.onBle(a, 1000 + t + i * 10);
+    }
+  TEST_ASSERT_FALSE(d.poll(11500, &e));
 }
 void test_one_airpods_case_not_spam() {
   AttackDetector d;
@@ -156,11 +178,13 @@ int main() {
   RUN_TEST(test_evil_twin_two_makers_one_open);
   RUN_TEST(test_mesh_wifi_same_maker_not_evil_twin);
   RUN_TEST(test_two_secured_makers_not_evil_twin);
+  RUN_TEST(test_evil_twin_needs_both_heard_close_together);
   RUN_TEST(test_karma_5_ssids);
   RUN_TEST(test_same_ssid_repeated_not_karma);
   RUN_TEST(test_pwnagotchi_bssid);
   RUN_TEST(test_flipper_name);
   RUN_TEST(test_ble_spam_many_addresses);
+  RUN_TEST(test_crowd_of_airpods_not_spam);
   RUN_TEST(test_one_airpods_case_not_spam);
   RUN_TEST(test_attack_poll_once_per_kind_per_2min);
   RUN_TEST(test_recent_keeps_newest_first);

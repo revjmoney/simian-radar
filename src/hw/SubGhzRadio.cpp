@@ -21,6 +21,15 @@ static char status[24] = "";
 
 static void IRAM_ATTR onRx() { rxFlag = true; }
 
+// Receive forever, and also flag a detected preamble so a step can wait for a packet in flight.
+static void listen() {
+  rxFlag = false;
+  radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED),
+                     RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
+}
+
+static bool packetInFlight() { return radio.getIrqFlags() & RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED; }
+
 // Front end: power the LDO and enable the GC1109 (or KCT8103L) in its receive path. Same
 // detection MeshCore uses: GPIO2 reads LOW with the GC1109's pull-down, HIGH with the KCT8103L.
 static void femReceive() {
@@ -61,20 +70,27 @@ bool subGhzBegin() {
 
 static void loraRx(float mhz, float bw, uint8_t sf, uint8_t syncWord, uint16_t preamble, const char* label) {
   radio.standby();
-  radio.begin(mhz, bw, sf, 5, syncWord, 0, preamble, kTcxo);
+  int st = radio.begin(mhz, bw, sf, 5, syncWord, 0, preamble, kTcxo);
+  if (st != RADIOLIB_ERR_NONE) {
+    snprintf(status, sizeof status, "LoRa setup err %d", st);
+    return;
+  }
   radio.setDio2AsRfSwitch(true);
   radio.setRxBoostedGainMode(true);
   radio.setCRC(true);
   radio.setPacketReceivedAction(onRx);
-  rxFlag = false;
-  radio.startReceive();
+  listen();
   snprintf(status, sizeof status, "%s", label);
 }
 
 static void fskRx(float mhz, float kbps, float devKhz, float rxBw, const uint8_t* sync, size_t syncLen, size_t fixedLen,
                   const char* label) {
   radio.standby();
-  radio.beginFSK(mhz, kbps, devKhz, rxBw, 0, 16, kTcxo);
+  int st = radio.beginFSK(mhz, kbps, devKhz, rxBw, 0, 16, kTcxo);
+  if (st != RADIOLIB_ERR_NONE) {
+    snprintf(status, sizeof status, "FSK setup err %d", st);
+    return;
+  }
   radio.setDio2AsRfSwitch(true);
   radio.setRxBoostedGainMode(true);
   radio.setSyncWord((uint8_t*)sync, syncLen);
@@ -83,17 +99,25 @@ static void fskRx(float mhz, float kbps, float devKhz, float rxBw, const uint8_t
   radio.setWhitening(false);
   radio.fixedPacketLengthMode(fixedLen);
   radio.setPacketReceivedAction(onRx);
-  rxFlag = false;
-  radio.startReceive();
+  listen();
   snprintf(status, sizeof status, "%s", label);
 }
 
-// LoRaWAN US915 sub-band 2 uplinks: 903.9 + 0.2 MHz x channel, SF7-SF10, 125 kHz.
+// LoRaWAN US915 sub-band 2 uplinks: 903.9 + 0.2 MHz x channel, SF7-SF10, 125 kHz. The modem is set
+// up once on entry; each step only retunes (a full begin() resets the chip and wastes the dwell).
+static uint8_t lorawanSf() { return 7 + (variant / 8) % 4; }
+static uint32_t lorawanDwellMs() {
+  static const uint32_t dwell[] = {200, 350, 600, 1100};  // longer than a short uplink at SF7..SF10
+  return dwell[lorawanSf() - 7];
+}
 static void lorawanStep() {
-  uint8_t ch = variant % 8, sf = 7 + (variant / 8) % 4;
-  char label[24];
-  snprintf(label, sizeof label, "%.1f SF%u", 903.9 + 0.2 * ch, sf);
-  loraRx(903.9 + 0.2 * ch, 125.0, sf, 0x34, 8, label);
+  uint8_t ch = variant % 8, sf = lorawanSf();
+  float mhz = 903.9f + 0.2f * ch;
+  radio.standby();
+  radio.setFrequency(mhz, true);  // same band as entry: no image recalibration needed
+  radio.setSpreadingFactor(sf);
+  listen();
+  snprintf(status, sizeof status, "%.1f SF%u", mhz, sf);
 }
 
 static void meshStep() {
@@ -109,7 +133,7 @@ void subGhzEnter(Mode m, uint32_t now) {
   sweepBin = 0;
   switch (m) {
     case Mode::Mesh: meshStep(); break;
-    case Mode::LoRaWan: lorawanStep(); break;
+    case Mode::LoRaWan: loraRx(903.9, 125.0, 7, 0x34, 8, "903.9 SF7"); break;
     case Mode::ZWave: {
       static const uint8_t sync[] = {0x55, 0xF0};  // Z-Wave R2: preamble 0x55, start of frame 0xF0
       fskRx(908.40, 40.0, 20.0, 117.3, sync, sizeof sync, 64, "Z-Wave 908.4 40k");
@@ -133,6 +157,7 @@ void subGhzEnter(Mode m, uint32_t now) {
 
 void subGhzLeave() {
   if (!ready) return;
+  current = Mode::Cam;  // nothing on 900 MHz owns the radio now; subGhzPoll goes idle
   radio.standby();
   rxFlag = false;
   status[0] = 0;
@@ -143,7 +168,7 @@ void subGhzPoll(uint32_t now, SubGhzSink* sink) {
   if (current == Mode::Sweep) {
     for (int i = 0; i < 4; i++) {  // a few bins per loop pass keeps the UI responsive
       float mhz = 902.25f + sweepBin * 0.5f;
-      radio.setFrequency(mhz);
+      radio.setFrequency(mhz, true);  // whole sweep is one band: skip calibration while receiving
       radio.startReceive();
       delayMicroseconds(800);
       float rssi = radio.getRSSI(false);  // instantaneous, not last packet
@@ -160,11 +185,12 @@ void subGhzPoll(uint32_t now, SubGhzSink* sink) {
     if (radio.readData(buf, n) == RADIOLIB_ERR_NONE && sink)
       sink->onPacket(current, current == Mode::LoRaWan ? variant % 8 : variant % 2, buf, n, radio.getRSSI(),
                      radio.getSNR());
-    radio.startReceive();
+    listen();
   }
-  // Step through presets/channels: MESH every 30 s, LORAWAN every 250 ms.
-  uint32_t dwell = current == Mode::Mesh ? 30000 : current == Mode::LoRaWan ? 250 : 0;
-  if (dwell && now - stepMs >= dwell) {
+  // Step through presets/channels: MESH every 30 s, LORAWAN per spreading factor. Never step away
+  // while a packet is arriving (up to 1.5 s extra).
+  uint32_t dwell = current == Mode::Mesh ? 30000 : current == Mode::LoRaWan ? lorawanDwellMs() : 0;
+  if (dwell && now - stepMs >= dwell && (!packetInFlight() || now - stepMs >= dwell + 1500)) {
     stepMs = now;
     variant++;
     if (current == Mode::Mesh) meshStep();

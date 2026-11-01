@@ -14,7 +14,7 @@ class AttackDetector {
  public:
   static const uint32_t kDeauthPerSec = 10;   // more than this per second from one BSSID = flood
   static const size_t kKarmaSsids = 5;        // one BSSID answering for this many SSIDs in 60 s
-  static const size_t kSpamAddresses = 20;    // distinct popup-advert senders within 10 s
+  static const size_t kSpamAddresses = 20;    // popup-advert addresses each heard only once, within 10 s
 
   void onWifi(const WifiFrame& f, uint32_t now);
   void onBle(const BleAdv& a, uint32_t now);
@@ -23,15 +23,15 @@ class AttackDetector {
 
  private:
   struct Deauth { bool used; uint8_t mac[6]; uint32_t windowMs; uint32_t count; };
-  struct Twin { bool used; uint32_t ssidHash; char ssid[20]; uint8_t oui[4][3]; bool open[4]; uint8_t n; };
+  struct Twin { bool used; uint32_t ssidHash; char ssid[20]; uint8_t oui[4][3]; bool open[4]; uint32_t ouiMs[4];
+               uint8_t n; uint32_t lastMs; };
   struct Karma { bool used; uint8_t mac[6]; uint32_t windowMs; uint32_t ssids[kKarmaSsids]; uint8_t n; };
-  struct Spam { uint32_t addrHash; uint32_t ms; };
+  struct Spam { uint32_t addrHash; uint32_t firstMs; uint16_t count; };
 
   Deauth deauth_[8] = {};
   Twin twins_[24] = {};
   Karma karma_[8] = {};
-  Spam spam_[48] = {};
-  size_t spamNext_ = 0;
+  Spam spam_[64] = {};
 
   AttackEvent pending_[8] = {};
   size_t nPending_ = 0;
@@ -41,4 +41,5 @@ class AttackDetector {
   bool reportedEver_[(int)AttackKind::Count] = {};
 
   void raise(AttackKind k, const uint8_t mac[6], const char* ssid, uint32_t now);
+  void checkSpam(uint32_t now);
 };

@@ -137,6 +137,17 @@ void test_drones_expire_and_cap() {
   TEST_ASSERT_EQUAL_UINT(0, t.list(d, 10, 1100 + 61000));
 }
 
+void test_nested_pack_skipped() {
+  DroneTable t;
+  std::vector<uint8_t> nested(ODID_MESSAGE_SIZE, 0);
+  nested[0] = 0xF2; nested[1] = ODID_MESSAGE_SIZE; nested[2] = 9;  // a pack inside a pack slot
+  auto p = wifiPack({location(33.7, -78.9, 10), nested});
+  t.onWifiIe(kMac, p.data(), p.size(), -60, 1000);
+  Drone d[2];
+  TEST_ASSERT_EQUAL_UINT(1, t.list(d, 2, 1000));  // the real location still counts
+  TEST_ASSERT_TRUE(d[0].hasPos);
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_wifi_pack_full_drone);
@@ -147,5 +158,6 @@ int main() {
   RUN_TEST(test_pack_bad_message_size_skipped);
   RUN_TEST(test_truncated_pack);
   RUN_TEST(test_drones_expire_and_cap);
+  RUN_TEST(test_nested_pack_skipped);
   return UNITY_END();
 }

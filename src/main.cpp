@@ -294,7 +294,7 @@ void loop() {
   if (wifiFlockHeardSince(lastFlockCheckMs)) app.onFlockHeard(now);
   lastFlockCheckMs = now;
   blePoll(onBle, now);
-  subGhzPoll(now, &radioSink);
+  if (isSubGhz(app.mode())) subGhzPoll(now, &radioSink);
 
   FollowAlert alert;
   if (follow.poll(now, &alert)) app.onFollow(alert, now);
@@ -313,7 +313,15 @@ void loop() {
   // The SX1262 belongs to whichever 900 MHz mode is on screen, and to nothing else.
   if (app.mode() != lastMode) {
     if (isSubGhz(lastMode)) subGhzLeave();
-    if (isSubGhz(app.mode()) && subGhzOk) subGhzEnter(app.mode(), now);
+    if (isSubGhz(app.mode()) && subGhzOk) {
+      // Each 900 MHz mode starts with a clean list.
+      meshNodes.clear();
+      lorawanDevs.clear();
+      zwaveNodes.clear();
+      wxStations.clear();
+      sweep = SweepStats();
+      subGhzEnter(app.mode(), now);
+    }
     lastMode = app.mode();
   }
 
