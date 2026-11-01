@@ -56,8 +56,7 @@ bool gpsPoll(Fix* out) {
   while (Serial1.available()) {
     char c = Serial1.read();
     gps.encode(c);
-    if (c == '
-' || c == '') {
+    if (c == '\n' || c == '\r') {
       line[lineLen] = 0;
       if (lineLen) onLine(now);
       lineLen = 0;
