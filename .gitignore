@@ -5,3 +5,4 @@ __pycache__/
 !test/fixtures/*.bin
 .superpowers/
 backups/
+build/
