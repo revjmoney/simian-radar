@@ -78,10 +78,12 @@ const char* netName(uint32_t a) {
 }
 
 bool parseZWave(const uint8_t* p, size_t n, uint32_t* homeId, uint8_t* src, uint8_t* type) {
-  if (!p || n < 10 || p[7] != n) return false;
+  if (!p || n < 10) return false;
+  size_t len = p[7];  // frame length incl. checksum; the radio may hand over trailing bytes
+  if (len < 10 || len > n) return false;
   uint8_t cs = 0xFF;
-  for (size_t i = 0; i + 1 < n; i++) cs ^= p[i];
-  if (cs != p[n - 1]) return false;
+  for (size_t i = 0; i + 1 < len; i++) cs ^= p[i];
+  if (cs != p[len - 1]) return false;
   *homeId = ((uint32_t)p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3];
   *src = p[4];
   *type = p[5] & 0x0F;

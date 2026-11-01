@@ -149,6 +149,14 @@ void test_zwave_frame() {
   TEST_ASSERT_EQUAL_UINT8(5, src);
   TEST_ASSERT_EQUAL_UINT8(1, type);  // singlecast
 }
+void test_zwave_trailing_bytes_ok() {
+  auto p = zwave(0xC0FFEE01, 7, 0x41, 1);
+  p.push_back(0x00); p.push_back(0x55);  // fixed-length receive buffer padding
+  uint32_t home;
+  uint8_t src, type;
+  TEST_ASSERT_TRUE(parseZWave(p.data(), p.size(), &home, &src, &type));
+  TEST_ASSERT_EQUAL_UINT8(7, src);
+}
 void test_zwave_bad_checksum() {
   auto p = zwave(0xC0FFEE01, 5, 0x41, 1);
   p.back() ^= 1;
@@ -255,6 +263,7 @@ int main() {
   RUN_TEST(test_lorawan_join_request);
   RUN_TEST(test_truncated_lorawan);
   RUN_TEST(test_zwave_frame);
+  RUN_TEST(test_zwave_trailing_bytes_ok);
   RUN_TEST(test_zwave_bad_checksum);
   RUN_TEST(test_truncated_zwave);
   RUN_TEST(test_weather_wh24);
