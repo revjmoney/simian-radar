@@ -23,7 +23,7 @@ bool gpsBegin() {
   digitalWrite(kPinGpsReset, LOW);
   delay(20);
   digitalWrite(kPinGpsReset, HIGH);
-  Serial1.begin(9600, SERIAL_8N1, kPinGpsRx, kPinGpsTx);
+  Serial1.begin(9600, SERIAL_8N1, kPinEspRxFromGps, kPinEspTxToGps);
   return true;
 }
 
@@ -42,3 +42,5 @@ bool gpsPoll(Fix* out) {
                       : 0;
   return true;
 }
+
+uint32_t gpsChars() { return gps.charsProcessed(); }

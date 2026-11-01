@@ -16,15 +16,19 @@ constexpr uint32_t kShortPressMaxMs = 1000;
 constexpr size_t kMaxMarks = 500;
 constexpr size_t kMaxBleTracked = 64;
 
-// Heltec V4 pins (MeshCore variants/heltec_v4). Vext is active HIGH on the V4.
+// Heltec V4 pins. Vext (OLED + GPS power) is active LOW on Rev's V4, per his working
+// D:blinkheltec-probe firmware. MeshCore's variant says HIGH; driving it HIGH cut the rail.
 constexpr int kPinSda = 17;
 constexpr int kPinScl = 18;
 constexpr int kPinOledRst = 21;
 constexpr int kPinVext = 36;
+constexpr int kVextOn = 0;  // LOW = on
 constexpr int kPinButton = 0;
 constexpr int kPinLed = 35;
-constexpr int kPinGpsRx = 38;
-constexpr int kPinGpsTx = 39;
+// GPS UART from the ESP32's side: it receives NMEA on 39 and transmits on 38. (MeshCore's
+// PIN_GPS_RX=38 / PIN_GPS_TX=39 are named from the GPS module's side.)
+constexpr int kPinEspRxFromGps = 39;
+constexpr int kPinEspTxToGps = 38;
 constexpr int kPinGpsEn = 34;
 constexpr int kPinGpsReset = 42;
 constexpr int kPinVbat = 1;

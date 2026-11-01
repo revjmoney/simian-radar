@@ -5,10 +5,10 @@
 
 static const int W = 64, H = 128;
 
-static void center(U8G2& d, int y, const char* s) { d.drawStr((W - d.getStrWidth(s)) / 2, y, s); }
+static void center(Canvas& d, int y, const char* s) { d.drawStr((W - d.getStrWidth(s)) / 2, y, s); }
 
 // Filled arrowhead pointing deg degrees clockwise from straight up, centred on (cx, cy).
-static void arrow(U8G2& d, int cx, int cy, int r, int deg) {
+static void arrow(Canvas& d, int cx, int cy, int r, int deg) {
   float a = deg * (float)M_PI / 180.0f, s = sinf(a), c = cosf(a);
   auto px = [&](float x, float y) { return (int)lroundf(cx + x * c - y * s); };
   auto py = [&](float x, float y) { return (int)lroundf(cy + x * s + y * c); };
@@ -17,7 +17,7 @@ static void arrow(U8G2& d, int cx, int cy, int r, int deg) {
   d.drawTriangle(px(0, tip), py(0, tip), px(half, back), py(half, back), px(0, notch), py(0, notch));
 }
 
-static void topStrip(U8G2& d, const char* tag, uint8_t sats, float vbat) {
+static void topStrip(Canvas& d, const char* tag, uint8_t sats, float vbat) {
   d.setFont(u8g2_font_5x7_tr);
   d.drawBox(0, 0, 22, 9);
   d.setDrawColor(0);
@@ -35,14 +35,14 @@ static void topStrip(U8G2& d, const char* tag, uint8_t sats, float vbat) {
   d.drawHLine(0, 10, W);
 }
 
-static void signalBar(U8G2& d, int y, int8_t rssi) {
+static void signalBar(Canvas& d, int y, int8_t rssi) {
   int w = (rssi + 100) * 50 / 70;  // -100 dBm empty, -30 dBm full
   if (w < 1) w = 1;
   if (w > 50) w = 50;
   d.drawBox(1, y, w, 2);
 }
 
-static void camList(U8G2& d, const AppLogic& app) {
+static void camList(Canvas& d, const AppLogic& app) {
   CamRow rows[4];
   size_t n = app.camRows(rows, 4);
   for (size_t i = 0; i < n; i++) {
@@ -70,7 +70,7 @@ static void camList(U8G2& d, const AppLogic& app) {
   center(d, 124, s);
 }
 
-static void listRow(U8G2& d, size_t i, bool flag, const char* label, int8_t rssi, int channel) {
+static void listRow(Canvas& d, size_t i, bool flag, const char* label, int8_t rssi, int channel) {
   int y = 13 + (int)i * 14;
   if (flag) {
     d.drawBox(0, y - 1, W, 13);
@@ -90,14 +90,14 @@ static void listRow(U8G2& d, size_t i, bool flag, const char* label, int8_t rssi
   d.setDrawColor(1);
 }
 
-static void wifiList(U8G2& d, const ApInfo* aps, size_t n) {
+static void wifiList(Canvas& d, const ApInfo* aps, size_t n) {
   d.setFont(u8g2_font_5x7_tr);
   if (!n) center(d, 60, "listening...");
   for (size_t i = 0; i < n && i < 7; i++)
     listRow(d, i, aps[i].flock, aps[i].ssid[0] ? aps[i].ssid : "(hidden)", aps[i].rssi, aps[i].channel);
 }
 
-static void bleList(U8G2& d, const BleSeen* ble, size_t n) {
+static void bleList(Canvas& d, const BleSeen* ble, size_t n) {
   d.setFont(u8g2_font_5x7_tr);
   if (!n) center(d, 60, "listening...");
   for (size_t i = 0; i < n && i < 7; i++) {
@@ -106,7 +106,7 @@ static void bleList(U8G2& d, const BleSeen* ble, size_t n) {
   }
 }
 
-static void drawOverlay(U8G2& d, const AppLogic& app, Overlay o, uint32_t camCount, size_t markCount) {
+static void drawOverlay(Canvas& d, const AppLogic& app, Overlay o, uint32_t camCount, size_t markCount) {
   char s[24];
   switch (o) {
     case Overlay::WaitingGps:
@@ -159,7 +159,7 @@ static void drawOverlay(U8G2& d, const AppLogic& app, Overlay o, uint32_t camCou
       center(d, 112, "hold 5s: mine");
       break;
     case Overlay::NewFlock:
-      for (int r = 12; r <= 24; r += 6) d.drawCircle(32, 40, r, U8G2_DRAW_UPPER_LEFT | U8G2_DRAW_UPPER_RIGHT);
+      for (int r = 12; r <= 24; r += 6) d.drawUpperArc(32, 40, r);
       d.drawDisc(32, 40, 3);
       d.setFont(u8g2_font_6x10_tr);
       center(d, 60, "HEARD A");
@@ -230,7 +230,7 @@ static void drawOverlay(U8G2& d, const AppLogic& app, Overlay o, uint32_t camCou
   d.setDrawColor(1);
 }
 
-void drawFrame(U8G2& d, const AppLogic& app, const ApInfo* aps, size_t nAps, const BleSeen* ble,
+void drawFrame(Canvas& d, const AppLogic& app, const ApInfo* aps, size_t nAps, const BleSeen* ble,
                size_t nBle, uint8_t sats, float vbat, uint32_t camCount, size_t markCount) {
   Overlay o = app.overlay();
   bool fullScreen = o == Overlay::CameraAhead || o == Overlay::TrackerFollowing;
