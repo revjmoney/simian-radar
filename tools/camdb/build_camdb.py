@@ -40,6 +40,8 @@ MIRRORS = [
     "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 ]
 USER_AGENT = "SimianRadar/0.1"
+DEFLOCK_INDEX = "https://cdn.deflock.me/regions/index.json"
+BRAND_TAGS = ("manufacturer", "brand", "surveillance:manufacturer", "surveillance:brand")
 
 
 def brand_code(manufacturer):
@@ -66,9 +68,37 @@ def parse_overpass(js):
         if el.get("type") != "node":
             continue
         tags = el.get("tags", {})
+        maker = next((tags[k] for k in BRAND_TAGS if tags.get(k)), None)
         out.append({"lat": el["lat"], "lon": el["lon"], "direction": _direction(tags),
-                    "manufacturer": tags.get("manufacturer")})
+                    "manufacturer": maker})
     return out
+
+
+def _in_us(lat, lon):
+    return any(s <= lat <= n and w <= lon <= e for s, w, n, e in US_BOXES)
+
+
+def _http_get_json(url):
+    import requests
+
+    r = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=120)
+    r.raise_for_status()
+    return r.json()
+
+
+def download_deflock(get=_http_get_json):
+    """DeFlock republishes every OSM ALPR node daily as 20 x 20 degree tiles on its CDN; fetch the
+    tiles that overlap the US and keep the nodes inside the US boxes."""
+    index = get(DEFLOCK_INDEX)
+    elements = []
+    for region in index["regions"]:
+        lat, lon = (int(x) for x in region.split("/"))
+        if not any(lat <= n and lat + 20 >= s and lon <= e and lon + 20 >= w for s, w, n, e in US_BOXES):
+            continue
+        for node in get(index["tile_url"].format(lat=lat, lon=lon)):
+            if _in_us(node["lat"], node["lon"]):
+                elements.append(dict(node, type="node"))
+    return {"elements": elements}
 
 
 def pack(cameras, built_unix=None):
@@ -156,13 +186,15 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--out", required=True)
     ap.add_argument("--from-json", help="Overpass JSON file instead of downloading")
+    ap.add_argument("--source", choices=["deflock", "overpass"], default="deflock",
+                    help="deflock: DeFlock's daily CDN copy of the OSM data (fast); overpass: query OSM")
     ap.add_argument("--save-json", help="also save the downloaded Overpass JSON here")
     args = ap.parse_args(argv)
     if args.from_json:
         with open(args.from_json, encoding="utf-8") as f:
             js = json.load(f)
     else:
-        js = download()
+        js = download_deflock() if args.source == "deflock" else download()
         if args.save_json:
             with open(args.save_json, "w", encoding="utf-8") as f:
                 json.dump(js, f)

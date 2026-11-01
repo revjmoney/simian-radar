@@ -81,3 +81,30 @@ def test_download_rotates_mirrors_and_caches(tmp_path):
     n = len(calls)
     b.download(fetch=fetch, cache_dir=str(tmp_path), tiles=tiles, pause=0)
     assert len(calls) == n  # second run served from the cache
+
+
+def test_brand_from_other_tags():
+    js = {"elements": [{"type": "node", "lat": 1.0, "lon": 2.0, "tags": {"brand": "Flock Safety"}},
+                       {"type": "node", "lat": 1.0, "lon": 2.0, "tags": {"surveillance:manufacturer": "Motorola"}}]}
+    out = b.parse_overpass(js)
+    assert [b.brand_code(c["manufacturer"]) for c in out] == [1, 2]
+
+
+def test_download_deflock_keeps_us_only():
+    index = {"regions": ["40/-80", "40/0"], "tile_url": "https://cdn/regions/{lat}/{lon}.json?v=1"}
+    tiles = {
+        "https://cdn/regions/40/-80.json?v=1": [
+            {"id": 1, "lat": 33.7, "lon": -78.9, "tags": {"manufacturer": "Flock Safety"}},
+            {"id": 2, "lat": 19.4, "lon": -99.1, "tags": {}},  # Mexico City: outside the US boxes
+        ],
+    }
+    fetched = []
+
+    def get(url):
+        fetched.append(url)
+        return index if url.endswith("index.json") else tiles[url]
+
+    js = b.download_deflock(get=get)
+    assert [e["id"] for e in js["elements"]] == [1]
+    assert js["elements"][0]["type"] == "node"
+    assert not any("/40/0.json" in u for u in fetched)  # Europe tile never fetched
