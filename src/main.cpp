@@ -99,6 +99,9 @@ void setup() {
   delay(50);
   Wire.begin(kPinSda, kPinScl);
   oled.begin();
+  oled.setContrast(255);
+  oled.sendF("ca", 0xD9, 0xF1);  // pre-charge period: brighter pixels
+  oled.sendF("ca", 0xDB, 0x40);  // VCOMH deselect level: max
   bootScreen();
 
   if (!LittleFS.begin(true)) Serial.println("LittleFS mount failed");
