@@ -16,7 +16,10 @@ class Canvas {
   void setFont(const uint8_t* f) { fonts_.setFont(f); }
   void setDrawColor(int c) { color_ = c ? SSD1306_WHITE : SSD1306_BLACK; }
   void drawStr(int x, int y, const char* s) {
+    // The glyph background gets painted too, so always make it the opposite colour: black text
+    // on a white box keeps the box white around the letters.
     fonts_.setForegroundColor(color_);
+    fonts_.setBackgroundColor(color_ == SSD1306_WHITE ? SSD1306_BLACK : SSD1306_WHITE);
     fonts_.drawStr(x, y, s);
   }
   int getStrWidth(const char* s) { return fonts_.getUTF8Width(s); }

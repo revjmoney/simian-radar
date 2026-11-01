@@ -40,6 +40,8 @@ static SeenTable<24> meshNodes, lorawanDevs, zwaveNodes, wxStations;
 static Fix lastFix = {};
 static float vbat = 0;
 static Mode lastMode = Mode::Cam;
+static uint32_t modeChangedMs = 0;
+static bool debugTap = false;
 static bool subGhzOk = false;
 static uint32_t lastDrawMs = 0, lastLogMs = 0, lastVbatMs = 0, lastFlockCheckMs = 0, lastSkyMs = 0;
 
@@ -167,14 +169,17 @@ static size_t buildRows(Mode m, Seen* rows, size_t max, uint32_t now, ScreenData
       n = collectors.phones(tmp, max, now);
       for (size_t i = 0; i < n; i++) {
         rows[i] = tmp[i];
-        snprintf(t, sizeof t, "%s %s", makerName((Maker)tmp[i].maker), tmp[i].text);
+        if ((Maker)tmp[i].maker == Maker::Unknown)  // no maker on file: show the end of its address
+          snprintf(t, sizeof t, "%02X%02X%02X %s", tmp[i].key[3], tmp[i].key[4], tmp[i].key[5], tmp[i].text);
+        else
+          snprintf(t, sizeof t, "%s %s", makerName((Maker)tmp[i].maker), tmp[i].text);
         setText(&rows[i], t);
       }
-      snprintf(foot, footLen, "%u in last min", (unsigned)collectors.phoneCount(now));
+      snprintf(foot, footLen, "%u this min", (unsigned)collectors.phoneCount(now));
       break;
     case Mode::SpyCam:
       n = collectors.spycams(rows, max, now);
-      snprintf(foot, footLen, n ? "%u cameras" : "no cameras heard", (unsigned)n);
+      snprintf(foot, footLen, n ? "%u cameras" : "none heard", (unsigned)n);
       break;
     case Mode::Attack: {
       AttackEvent ev[7];
@@ -186,7 +191,7 @@ static size_t buildRows(Mode m, Seen* rows, size_t max, uint32_t now, ScreenData
       }
       sd.rowBars = false;
       sd.rowFlagAll = true;
-      snprintf(foot, footLen, n ? "since power on" : "nothing heard");
+      snprintf(foot, footLen, n ? "since boot" : "none heard");
       break;
     }
     case Mode::Tags:
@@ -196,7 +201,7 @@ static size_t buildRows(Mode m, Seen* rows, size_t max, uint32_t now, ScreenData
         snprintf(t, sizeof t, "%s %lum", tmp[i].text, (unsigned long)((now - tmp[i].firstMs) / 60000));
         setText(&rows[i], t);
       }
-      snprintf(foot, footLen, "trackers + glasses");
+      snprintf(foot, footLen, "%u nearby", (unsigned)n);
       break;
     case Mode::Bodycam:
       n = collectors.bodycams(tmp, max, now);
@@ -205,7 +210,7 @@ static size_t buildRows(Mode m, Seen* rows, size_t max, uint32_t now, ScreenData
         snprintf(t, sizeof t, "AXON %02X%02X%02X", tmp[i].key[3], tmp[i].key[4], tmp[i].key[5]);
         setText(&rows[i], t);
       }
-      snprintf(foot, footLen, n ? "%u Axon devices" : "none heard", (unsigned)n);
+      snprintf(foot, footLen, n ? "%u Axon" : "none heard", (unsigned)n);
       break;
     case Mode::Drone: {
       Drone d[7];
@@ -230,9 +235,9 @@ static size_t buildRows(Mode m, Seen* rows, size_t max, uint32_t now, ScreenData
       if (n && d[0].hasPilot && app.hasFix()) {
         char dist[8];
         formatDistance(haversineM(app.fix().lat, app.fix().lon, d[0].pilotLat, d[0].pilotLon), dist, sizeof dist);
-        snprintf(foot, footLen, "pilot %s away", dist);
+        snprintf(foot, footLen, "pilot %s", dist);
       } else {
-        snprintf(foot, footLen, n ? "%u drones" : "no Remote ID", (unsigned)n);
+        snprintf(foot, footLen, n ? "%u drones" : "none heard", (unsigned)n);
       }
       break;
     }
@@ -288,6 +293,10 @@ void loop() {
 
   BtnEvent e = button.update(digitalRead(kPinButton) == LOW, now);
   if (e != BtnEvent::None) app.onButton(e, button.holdFraction(), now);
+  if (debugTap) {  // 'n' over USB serial acts like a short tap (bench testing)
+    debugTap = false;
+    app.onButton(BtnEvent::ShortPress, 0, now);
+  }
 
   wifiScanHop(now, onWifiDwell);
   wifiPoll(now, onWifiFrame);
@@ -323,6 +332,7 @@ void loop() {
       subGhzEnter(app.mode(), now);
     }
     lastMode = app.mode();
+    modeChangedMs = now;
   }
 
   Overlay o = app.overlay();
@@ -347,6 +357,7 @@ void loop() {
     sd.vbat = vbat;
     sd.camCount = db.count();
     sd.markCount = marks.count();
+    sd.showBanner = modeChangedMs && now - modeChangedMs < 1200;
     switch (app.mode()) {
       case Mode::Wifi: sd.aps = aps; sd.nAps = wifiScanResults(aps, 7, now); break;
       case Mode::Bt: sd.ble = ble; sd.nBle = bleList(ble, 7, now); break;
@@ -367,6 +378,15 @@ void loop() {
     canvas.clear();
     drawFrame(canvas, app, sd);
     canvas.send();
+    // Debug: send 'd' over USB serial to get the current frame as hex (128x64 SSD1306 page layout).
+    int cmd = Serial.available() ? Serial.read() : -1;
+    if (cmd == 'n') debugTap = true;
+    if (cmd == 'd') {
+      const uint8_t* fb = display.getBuffer();
+      Serial.print("FB:");
+      for (int i = 0; i < 1024; i++) Serial.printf("%02x", fb[i]);
+      Serial.println();
+    }
     if (now - lastLogMs >= 2000) {
       lastLogMs = now;
       Serial.printf("mode=%s gpschars=%lu fix=%d sats=%u cams=%lu within=%lu phones=%u marks=%u overlay=%d radio=%s vbat=%.2f\n",

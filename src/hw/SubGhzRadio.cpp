@@ -121,8 +121,8 @@ static void lorawanStep() {
 }
 
 static void meshStep() {
-  if (variant % 2 == 0) loraRx(906.875, 250.0, 11, 0x2B, 16, "Meshtastic LongFast");
-  else loraRx(910.525, 62.5, 7, RADIOLIB_SX126X_SYNC_WORD_PRIVATE, 16, "MeshCore US");
+  if (variant % 2 == 0) loraRx(906.875, 250.0, 11, 0x2B, 16, "Meshtastic");
+  else loraRx(910.525, 62.5, 7, RADIOLIB_SX126X_SYNC_WORD_PRIVATE, 16, "MeshCore");
 }
 
 void subGhzEnter(Mode m, uint32_t now) {
@@ -136,12 +136,12 @@ void subGhzEnter(Mode m, uint32_t now) {
     case Mode::LoRaWan: loraRx(903.9, 125.0, 7, 0x34, 8, "903.9 SF7"); break;
     case Mode::ZWave: {
       static const uint8_t sync[] = {0x55, 0xF0};  // Z-Wave R2: preamble 0x55, start of frame 0xF0
-      fskRx(908.40, 40.0, 20.0, 117.3, sync, sizeof sync, 64, "Z-Wave 908.4 40k");
+      fskRx(908.40, 40.0, 20.0, 117.3, sync, sizeof sync, 64, "908.4 MHz 40k");
       break;
     }
     case Mode::Wx: {
       static const uint8_t sync[] = {0x2D, 0xD4};  // Fine Offset WH24/WH65
-      fskRx(915.0, 17.24, 40.0, 117.3, sync, sizeof sync, 17, "WX 915 17.2k");
+      fskRx(915.0, 17.24, 40.0, 117.3, sync, sizeof sync, 17, "915 MHz 17k");
       break;
     }
     case Mode::Sweep:
@@ -149,7 +149,7 @@ void subGhzEnter(Mode m, uint32_t now) {
       radio.beginFSK(902.25, 4.8, 5.0, 156.2, 0, 16, kTcxo);
       radio.setDio2AsRfSwitch(true);
       radio.setRxBoostedGainMode(true);
-      snprintf(status, sizeof status, "902-928 sweep");
+      snprintf(status, sizeof status, "902-928 MHz");
       break;
     default: break;
   }

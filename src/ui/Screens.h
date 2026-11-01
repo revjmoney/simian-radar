@@ -28,6 +28,7 @@ struct ScreenData {
   float vbat = 0;
   uint32_t camCount = 0;
   size_t markCount = 0;
+  bool showBanner = false;  // big mode name for a moment after a tap
 };
 
 // Draws one full frame for the 64x128 portrait OLED. Caller clears and sends the buffer.

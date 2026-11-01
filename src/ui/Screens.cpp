@@ -7,6 +7,12 @@ static const int W = 64, H = 128;
 
 static void center(Canvas& d, int y, const char* s) { d.drawStr((W - d.getStrWidth(s)) / 2, y, s); }
 
+// Copies s into out, cut short so it fits maxW pixels in the current font.
+static void fit(Canvas& d, const char* s, char* out, size_t outLen, int maxW) {
+  snprintf(out, outLen, "%s", s);
+  for (size_t n = strlen(out); n > 0 && d.getStrWidth(out) > maxW; n--) out[n - 1] = 0;
+}
+
 // Filled arrowhead pointing deg degrees clockwise from straight up, centred on (cx, cy).
 static void arrow(Canvas& d, int cx, int cy, int r, int deg) {
   float a = deg * (float)M_PI / 180.0f, s = sinf(a), c = cosf(a);
@@ -18,15 +24,13 @@ static void arrow(Canvas& d, int cx, int cy, int r, int deg) {
 }
 
 static void topStrip(Canvas& d, const char* tag, uint8_t sats, float vbat) {
-  d.setFont(u8g2_font_5x7_tr);
+  (void)sats;  // satellite count lives on the SKY and WAITING FOR GPS screens
+  d.setFont(u8g2_font_6x10_tr);
   int tagW = d.getStrWidth(tag) + 4;
-  d.drawBox(0, 0, tagW, 9);
+  d.drawBox(0, 0, tagW, 10);
   d.setDrawColor(0);
-  d.drawStr(2, 7, tag);
+  d.drawStr(2, 8, tag);
   d.setDrawColor(1);
-  char s[8];
-  snprintf(s, sizeof s, "*%u", sats);
-  if (tagW + 4 + d.getStrWidth(s) < 50) d.drawStr(tagW + 4, 7, s);
   d.drawFrame(51, 1, 11, 6);
   d.drawBox(62, 3, 1, 2);
   float frac = (vbat - 3.3f) / (4.2f - 3.3f);
@@ -77,9 +81,10 @@ static void listRow(Canvas& d, size_t i, bool flag, const char* label, int8_t rs
     d.drawBox(0, y - 1, W, 13);
     d.setDrawColor(0);
   }
-  char name[14];
-  snprintf(name, sizeof name, "%s%s", flag ? "!" : "", label);
+  char full[40], name[40];
+  snprintf(full, sizeof full, "%s%s", flag ? "!" : "", label);
   d.setFont(u8g2_font_5x7_tr);
+  fit(d, full, name, sizeof name, channel > 0 ? W - 13 : W - 2);  // leave room for the channel
   d.drawStr(1, y + 6, name);
   signalBar(d, y + 8, rssi);
   if (channel > 0) {
@@ -240,10 +245,38 @@ static void drawOverlay(Canvas& d, const AppLogic& app, Overlay o, uint32_t camC
   d.setDrawColor(1);
 }
 
+// Bottom line: as big as fits, cut short if even the small font is too wide.
 static void footer(Canvas& d, const char* text) {
   d.drawHLine(0, 115, W);
-  d.setFont(u8g2_font_4x6_tr);
-  center(d, 124, text);
+  d.setFont(u8g2_font_5x7_tr);
+  if (d.getStrWidth(text) > W - 4) d.setFont(u8g2_font_4x6_tr);
+  char t[32];
+  fit(d, text, t, sizeof t, W - 4);
+  center(d, 125, t);
+}
+
+// Shown for a moment after each tap so it is obvious which mode you landed in.
+static void modeBanner(Canvas& d, Mode m) {
+  static const char* names[] = {"CAMERAS", "WIFI", "PHONES", "SPY CAMS", "CHANNELS", "ATTACKS", "BLUETOOTH",
+                                "TRACKERS", "BODY CAMS", "DRONES", "MESH", "LORAWAN", "Z-WAVE", "WEATHER",
+                                "900 MHZ", "SATELLITES"};
+  static const char* about[] = {"plate readers", "networks", "devices nearby", "WiFi cameras", "traffic by chan",
+                                "hack tools", "all devices", "AirTag, glasses", "Axon police", "Remote ID",
+                                "LoRa nodes", "IoT sensors", "smart home", "backyard stations", "band sweep",
+                                "GPS sky"};
+  int i = (int)m;
+  char num[8];
+  snprintf(num, sizeof num, "%d/16", i + 1);
+  d.drawBox(0, 12, W, H - 12);  // whole screen under the tag: impossible to miss
+  d.setDrawColor(0);
+  d.setFont(u8g2_font_6x10_tr);
+  center(d, 44, num);
+  d.setFont(d.getStrWidth(names[i]) <= 10 * 7 ? u8g2_font_7x13B_tr : u8g2_font_6x10_tr);
+  if (d.getStrWidth(names[i]) > W - 2) d.setFont(u8g2_font_6x10_tr);
+  center(d, 64, names[i]);
+  d.setFont(u8g2_font_5x7_tr);
+  center(d, 82, about[i]);
+  d.setDrawColor(1);
 }
 
 static void rowList(Canvas& d, const ScreenData& s) {
@@ -255,7 +288,9 @@ static void rowList(Canvas& d, const ScreenData& s) {
     } else {
       int y = 13 + (int)i * 14;
       if (s.rowFlagAll) { d.drawBox(0, y - 1, W, 13); d.setDrawColor(0); }
-      d.drawStr(1, y + 8, s.rows[i].text);
+      char t[40];
+      fit(d, s.rows[i].text, t, sizeof t, W - 2);
+      d.drawStr(1, y + 8, t);
       d.setDrawColor(1);
     }
   }
@@ -348,4 +383,5 @@ void drawFrame(Canvas& d, const AppLogic& app, const ScreenData& s) {
     }
   }
   if (o != Overlay::None) drawOverlay(d, app, o, s.camCount, s.markCount);
+  else if (s.showBanner) modeBanner(d, app.mode());
 }
