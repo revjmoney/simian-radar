@@ -19,13 +19,14 @@ static void arrow(Canvas& d, int cx, int cy, int r, int deg) {
 
 static void topStrip(Canvas& d, const char* tag, uint8_t sats, float vbat) {
   d.setFont(u8g2_font_5x7_tr);
-  d.drawBox(0, 0, 22, 9);
+  int tagW = d.getStrWidth(tag) + 4;
+  d.drawBox(0, 0, tagW, 9);
   d.setDrawColor(0);
   d.drawStr(2, 7, tag);
   d.setDrawColor(1);
   char s[8];
   snprintf(s, sizeof s, "*%u", sats);
-  d.drawStr(26, 7, s);
+  if (tagW + 4 + d.getStrWidth(s) < 50) d.drawStr(tagW + 4, 7, s);
   d.drawFrame(51, 1, 11, 6);
   d.drawBox(62, 3, 1, 2);
   float frac = (vbat - 3.3f) / (4.2f - 3.3f);
@@ -224,6 +225,15 @@ static void drawOverlay(Canvas& d, const AppLogic& app, Overlay o, uint32_t camC
       d.setFont(u8g2_font_4x6_tr);
       center(d, 75, "nearby");
       break;
+    case Overlay::Toast:
+      d.setDrawColor(0);
+      d.drawBox(0, 44, W, 30);
+      d.setDrawColor(1);
+      d.drawBox(2, 46, W - 4, 26);
+      d.setDrawColor(0);
+      d.setFont(u8g2_font_5x7_tr);
+      center(d, 62, app.toastText());
+      break;
     case Overlay::None:
       break;
   }
@@ -234,9 +244,9 @@ void drawFrame(Canvas& d, const AppLogic& app, const ApInfo* aps, size_t nAps, c
                size_t nBle, uint8_t sats, float vbat, uint32_t camCount, size_t markCount) {
   Overlay o = app.overlay();
   bool fullScreen = o == Overlay::CameraAhead || o == Overlay::TrackerFollowing;
-  const char* tag = app.mode() == Mode::Cam ? "CAM" : app.mode() == Mode::Wifi ? "WIFI" : "BT";
+  const char* tag = modeTag(app.mode());
   if (!fullScreen) topStrip(d, tag, sats, vbat);
-  if (o == Overlay::None || o == Overlay::GlassesToast) {
+  if (o == Overlay::None || o == Overlay::GlassesToast || o == Overlay::Toast) {
     if (app.mode() == Mode::Cam) camList(d, app);
     else if (app.mode() == Mode::Wifi) wifiList(d, aps, nAps);
     else bleList(d, ble, nBle);

@@ -8,9 +8,12 @@
 #include "MarkStore.h"
 #include "Signatures.h"
 
-enum class Mode { Cam, Wifi, Bt };
+enum class Mode { Cam, Wifi, Phone, SpyCam, Chan, Attack, Bt, Tags, Bodycam, Drone, Mesh, LoRaWan, ZWave,
+                  Wx, Sweep, Sky, Count };
+const char* modeTag(Mode m);
+bool isSubGhz(Mode m);  // modes that own the SX1262 while on screen
 enum class Overlay { None, WaitingGps, NoCamData, CameraAhead, NewFlock, Marking, Marked, MarkRefused,
-                     MarksFull, TrackerFollowing, GlassesToast };
+                     MarksFull, TrackerFollowing, GlassesToast, Toast };
 
 struct CamRow { char dist[8]; const char* brand; int arrowDeg; const char* compass; bool unconfirmed; };
 
@@ -25,6 +28,7 @@ class AppLogic {
   void onFlockHeard(uint32_t nowMs);
   void onFollow(const FollowAlert& a, uint32_t nowMs);
   void onGlasses(BleKind k, int8_t rssi, const uint8_t key[8], uint32_t nowMs);
+  void onToast(const char* text, uint32_t nowMs);  // short notice: attacks, GPS guard
   void tick(uint32_t nowMs);
 
   Mode mode() const { return mode_; }
@@ -40,6 +44,7 @@ class AppLogic {
   BleKind glassesKind() const { return glassesKind_; }
   float holdFraction() const { return holdFraction_; }
   AddResult markResult() const { return markResult_; }
+  const char* toastText() const { return toastText_; }
 
  private:
   struct Row { int32_t latE7, lonE7; uint8_t brand; float distM, bearingDeg; bool unconfirmed; };
@@ -79,6 +84,9 @@ class AppLogic {
   size_t nGlasses_ = 0;
   uint32_t glassesUntil_ = 0;
   BleKind glassesKind_ = BleKind::Other;
+
+  char toastText_[24] = "";
+  uint32_t toastUntil_ = 0;
 
   bool active(uint32_t until) const { return until && now_ < until; }
   bool dismissTop();

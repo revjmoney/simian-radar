@@ -72,9 +72,7 @@ void test_mode_cycles_cam_wifi_bt() {
   press(1100);
   TEST_ASSERT_EQUAL_INT((int)Mode::Wifi, (int)app->mode());
   press(1200);
-  TEST_ASSERT_EQUAL_INT((int)Mode::Bt, (int)app->mode());
-  press(1300);
-  TEST_ASSERT_EQUAL_INT((int)Mode::Cam, (int)app->mode());
+  TEST_ASSERT_EQUAL_INT((int)Mode::Phone, (int)app->mode());
 }
 void test_short_press_dismisses_overlay_not_mode() {
   at(kLat, kLon, 1000);
@@ -283,6 +281,33 @@ void test_own_mark_listed_unconfirmed_without_alert() {
   TEST_ASSERT_EQUAL_UINT32(0, app->withinCount());
 }
 
+void test_mode_cycles_all_16_and_wraps() {
+  at(kFarLat, kFarLon, 1000);
+  const char* expect[] = {"WIFI", "PHONE", "SPYCAM", "CHAN", "ATTACK", "BT", "TAGS", "BODYCAM",
+                          "DRONE", "MESH", "LORAWAN", "ZWAVE", "WX", "900", "SKY", "CAM"};
+  for (int i = 0; i < 16; i++) {
+    press(2000 + i * 10);
+    TEST_ASSERT_EQUAL_STRING(expect[i], modeTag(app->mode()));
+  }
+}
+void test_sub_ghz_modes_flagged() {
+  TEST_ASSERT_TRUE(isSubGhz(Mode::Mesh));
+  TEST_ASSERT_TRUE(isSubGhz(Mode::Sweep));
+  TEST_ASSERT_TRUE(isSubGhz(Mode::ZWave));
+  TEST_ASSERT_FALSE(isSubGhz(Mode::Drone));
+  TEST_ASSERT_FALSE(isSubGhz(Mode::Sky));
+  TEST_ASSERT_FALSE(isSubGhz(Mode::Cam));
+}
+void test_toast_shows_3s() {
+  at(kFarLat, kFarLon, 1000);
+  app->onToast("DEAUTH FLOOD", 1000);
+  app->tick(1000);
+  OVERLAY(Toast);
+  TEST_ASSERT_EQUAL_STRING("DEAUTH FLOOD", app->toastText());
+  at(kFarLat, kFarLon, 4100);
+  OVERLAY(None);
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_mode_cycles_cam_wifi_bt);
@@ -311,5 +336,8 @@ int main() {
   RUN_TEST(test_no_cam_data_still_allows_wifi_bt_modes);
   RUN_TEST(test_waiting_gps_only_in_cam_mode);
   RUN_TEST(test_own_mark_listed_unconfirmed_without_alert);
+  RUN_TEST(test_mode_cycles_all_16_and_wraps);
+  RUN_TEST(test_sub_ghz_modes_flagged);
+  RUN_TEST(test_toast_shows_3s);
   return UNITY_END();
 }

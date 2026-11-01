@@ -11,6 +11,22 @@ static const uint32_t kProgressGapMs = 250;
 static const uint32_t kMarkShowMs = 4000;
 static const uint32_t kGlassesShowMs = 3000;
 static const uint32_t kGlassesEveryMs = 10UL * 60UL * 1000UL;
+static const uint32_t kToastShowMs = 3000;
+
+const char* modeTag(Mode m) {
+  static const char* tags[] = {"CAM", "WIFI", "PHONE", "SPYCAM", "CHAN", "ATTACK", "BT", "TAGS", "BODYCAM",
+                               "DRONE", "MESH", "LORAWAN", "ZWAVE", "WX", "900", "SKY"};
+  return m < Mode::Count ? tags[(int)m] : "";
+}
+
+bool isSubGhz(Mode m) { return m >= Mode::Mesh && m <= Mode::Sweep; }
+
+void AppLogic::onToast(const char* text, uint32_t nowMs) {
+  now_ = nowMs;
+  strncpy(toastText_, text, sizeof toastText_ - 1);
+  toastText_[sizeof toastText_ - 1] = 0;
+  toastUntil_ = nowMs + kToastShowMs;
+}
 
 bool AppLogic::hasFix() const { return fix_.valid && now_ - fixMs_ <= kFixStaleMs; }
 
@@ -26,7 +42,7 @@ void AppLogic::onButton(BtnEvent e, float holdFraction, uint32_t nowMs) {
   switch (e) {
     case BtnEvent::ShortPress:
       progressMs_ = 0;
-      if (!dismissTop()) mode_ = mode_ == Mode::Cam ? Mode::Wifi : mode_ == Mode::Wifi ? Mode::Bt : Mode::Cam;
+      if (!dismissTop()) mode_ = (Mode)(((int)mode_ + 1) % (int)Mode::Count);
       break;
     case BtnEvent::HoldProgress:
       progressMs_ = nowMs;
@@ -179,6 +195,7 @@ bool AppLogic::dismissTop() {
   if (active(aheadUntil_)) { aheadUntil_ = 0; return true; }
   if (active(markUntil_)) { markUntil_ = 0; return true; }
   if (active(newFlockUntil_)) { newFlockUntil_ = 0; return true; }
+  if (active(toastUntil_)) { toastUntil_ = 0; return true; }
   if (active(glassesUntil_)) { glassesUntil_ = 0; return true; }
   return false;
 }
@@ -195,6 +212,7 @@ Overlay AppLogic::overlay() const {
     }
   }
   if (active(newFlockUntil_)) return Overlay::NewFlock;
+  if (active(toastUntil_)) return Overlay::Toast;
   if (active(glassesUntil_)) return Overlay::GlassesToast;
   if (mode_ == Mode::Cam) {
     if (!hasFix()) return Overlay::WaitingGps;
