@@ -5,6 +5,30 @@
 
 static TinyGPSPlus gps;
 
+// Satellites in view, from the GSV sentences TinyGPSPlus doesn't keep.
+struct SatSlot { SatInfo s; uint32_t ms; bool used; };
+static SatSlot sats[40];
+static char line[100];
+static size_t lineLen = 0;
+
+static void onLine(uint32_t now) {
+  SatInfo got[4];
+  size_t n = parseGsv(line, got, 4);
+  for (size_t i = 0; i < n; i++) {
+    SatSlot* slot = nullptr;
+    SatSlot* oldest = &sats[0];
+    for (auto& x : sats) {
+      if (x.used && x.s.prn == got[i].prn && x.s.sys == got[i].sys) { slot = &x; break; }
+      if (!x.used) oldest = &x;
+      else if (oldest->used && (int32_t)(x.ms - oldest->ms) < 0) oldest = &x;
+    }
+    if (!slot) slot = oldest;
+    slot->s = got[i];
+    slot->ms = now;
+    slot->used = true;
+  }
+}
+
 // Days since 1970-01-01 for a civil date (Howard Hinnant's algorithm).
 static uint32_t unixFrom(int y, unsigned m, unsigned d, unsigned hh, unsigned mm, unsigned ss) {
   y -= m <= 2;
@@ -28,7 +52,19 @@ bool gpsBegin() {
 }
 
 bool gpsPoll(Fix* out) {
-  while (Serial1.available()) gps.encode(Serial1.read());
+  uint32_t now = millis();
+  while (Serial1.available()) {
+    char c = Serial1.read();
+    gps.encode(c);
+    if (c == '
+' || c == '') {
+      line[lineLen] = 0;
+      if (lineLen) onLine(now);
+      lineLen = 0;
+    } else if (lineLen < sizeof line - 1) {
+      line[lineLen++] = c;
+    }
+  }
   out->sats = gps.satellites.isValid() ? gps.satellites.value() : 0;
   out->valid = gps.location.isValid() && gps.location.age() < 2000;
   if (!out->valid || !gps.location.isUpdated()) return false;  // report each new fix once (~1 Hz)
@@ -44,3 +80,15 @@ bool gpsPoll(Fix* out) {
 }
 
 uint32_t gpsChars() { return gps.charsProcessed(); }
+
+size_t gpsSats(SatInfo* out, size_t max, uint32_t now) {
+  size_t n = 0;
+  for (auto& x : sats) {
+    if (x.used && now - x.ms > 5000) x.used = false;
+    if (x.used && n < max) out[n++] = x.s;
+  }
+  return n;
+}
+
+float gpsHdop() { return gps.hdop.isValid() ? gps.hdop.hdop() : 0; }
+float gpsAltM() { return gps.altitude.isValid() ? (float)gps.altitude.meters() : 0; }
