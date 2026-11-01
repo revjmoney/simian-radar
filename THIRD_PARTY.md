@@ -27,3 +27,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.```
+
+From opendroneid/opendroneid-core-c at commit 849c03adbe0cdd68997a462fafab397edcfe53f3 (Apache License 2.0, https://www.apache.org/licenses/LICENSE-2.0):
+
+- lib/opendroneid/opendroneid.c, lib/opendroneid/opendroneid.h (ASTM F3411 Remote ID encode/decode)
