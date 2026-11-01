@@ -10,6 +10,7 @@ class Collectors {
   static const uint32_t kExpireMs = 60000;
   void onWifi(const WifiFrame& f, int8_t rssi, uint8_t channel, uint32_t now);
   void onDwell(uint8_t channel, uint32_t ms);  // the sniffer spent ms listening on channel
+  void onFrameCount(uint8_t channel, uint32_t frames);  // every frame heard there, parsed or not
   void onBle(const BleAdv& a, BleKind k, const uint8_t key[8], uint32_t now);
 
   size_t phones(Seen* out, size_t max, uint32_t now) { return phones_.list(out, max, now, kExpireMs); }

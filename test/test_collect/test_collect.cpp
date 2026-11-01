@@ -62,7 +62,7 @@ void test_ordinary_router_not_spycam() {
 }
 void test_channel_rates() {
   Collectors c;
-  for (int i = 0; i < 50; i++) c.onWifi(frame(0, kWifiBeacon, kRouter, "x"), -60, 1, 1000);
+  c.onFrameCount(1, 50);  // the sniffer counts every frame, parsed or not
   c.onDwell(1, 1000);
   c.onDwell(6, 500);
   float r[11];
@@ -73,8 +73,8 @@ void test_channel_rates() {
 }
 void test_channel_out_of_range_ignored() {
   Collectors c;
-  c.onWifi(frame(0, kWifiBeacon, kRouter, "x"), -60, 14, 1000);
-  c.onWifi(frame(0, kWifiBeacon, kRouter, "x"), -60, 0, 1000);
+  c.onFrameCount(14, 10);
+  c.onFrameCount(0, 10);
   c.onDwell(14, 1000);
   float r[11];
   c.channelRates(r);

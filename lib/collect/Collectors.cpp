@@ -8,7 +8,6 @@ static void setText(Seen* s, const char* t) {
 }
 
 void Collectors::onWifi(const WifiFrame& f, int8_t rssi, uint8_t channel, uint32_t now) {
-  if (channel >= 1 && channel <= 11) frames_[channel - 1]++;
   if (!f.hasA2) return;
   Maker m = makerOf(f.a2);
 
@@ -32,6 +31,10 @@ void Collectors::onWifi(const WifiFrame& f, int8_t rssi, uint8_t channel, uint32
     s->maker = (uint8_t)m;
     setText(s, makerName(m));
   }
+}
+
+void Collectors::onFrameCount(uint8_t channel, uint32_t frames) {
+  if (channel >= 1 && channel <= 11) frames_[channel - 1] += frames;
 }
 
 void Collectors::onDwell(uint8_t channel, uint32_t ms) {
