@@ -63,3 +63,21 @@ def test_parse_overpass_direction():
                         "tags": {"camera:direction": "45;90", "manufacturer": "Flock Safety"}}]}
     out = b.parse_overpass(js)
     assert out == [{"lat": 1.0, "lon": 2.0, "direction": 45, "manufacturer": "Flock Safety"}]
+
+
+def test_download_rotates_mirrors_and_caches(tmp_path):
+    calls = []
+
+    def fetch(url, query):
+        calls.append(url)
+        if url == b.MIRRORS[0]:
+            raise IOError("504")
+        return {"elements": [{"type": "node", "id": len(calls), "lat": 1.0, "lon": 2.0, "tags": {}}]}
+
+    tiles = [(1, 2, 3, 4), (5, 6, 7, 8)]
+    js = b.download(fetch=fetch, cache_dir=str(tmp_path), tiles=tiles, pause=0)
+    assert len(js["elements"]) == 2
+    assert b.MIRRORS[1] in calls
+    n = len(calls)
+    b.download(fetch=fetch, cache_dir=str(tmp_path), tiles=tiles, pause=0)
+    assert len(calls) == n  # second run served from the cache

@@ -33,7 +33,12 @@ BRANDS = [
 
 # Lower 48, Alaska, Hawaii as (south, west, north, east); split into 5 x 5 degree tiles.
 US_BOXES = [(24, -125, 50, -66), (51, -170, 72, -129), (18, -161, 23, -154)]
-OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+MIRRORS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+]
 USER_AGENT = "SimianRadar/0.1"
 
 
@@ -107,24 +112,41 @@ def _tiles():
                 yield lat, lon, min(lat + 5, n), min(lon + 5, e)
 
 
-def download():
+def _http_fetch(url, query):
     import requests
 
+    r = requests.post(url, data={"data": query}, headers={"User-Agent": USER_AGENT}, timeout=180)
+    r.raise_for_status()
+    return r.json()
+
+
+def download(fetch=_http_fetch, cache_dir="build/tiles", tiles=None, pause=10, rounds=4):
+    """Fetches every tile, trying each mirror in turn. Finished tiles are cached as JSON so a
+    rerun after a failure only fetches what is missing."""
+    import os
+
+    os.makedirs(cache_dir, exist_ok=True)
     seen = {}
-    for s, w, n, e in _tiles():
-        query = '[out:json][timeout:120];node["surveillance:type"="ALPR"](%s,%s,%s,%s);out;' % (s, w, n, e)
-        for attempt in range(3):
-            try:
-                r = requests.post(OVERPASS_URL, data={"data": query},
-                                  headers={"User-Agent": USER_AGENT}, timeout=180)
-                r.raise_for_status()
-                js = r.json()
-                break
-            except Exception as ex:  # network or server hiccup: retry the tile
-                print("tile %s,%s attempt %d failed: %s" % (s, w, attempt + 1, ex), file=sys.stderr)
-                time.sleep(10 * (attempt + 1))
+    for s, w, n, e in tiles if tiles is not None else _tiles():
+        path = os.path.join(cache_dir, "%s_%s_%s_%s.json" % (s, w, n, e))
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as f:
+                js = json.load(f)
         else:
-            raise SystemExit("tile %s,%s failed 3 times" % (s, w))
+            query = '[out:json][timeout:120];node["surveillance:type"="ALPR"](%s,%s,%s,%s);out;' % (s, w, n, e)
+            js = None
+            for attempt in range(rounds * len(MIRRORS)):
+                url = MIRRORS[attempt % len(MIRRORS)]
+                try:
+                    js = fetch(url, query)
+                    break
+                except Exception as ex:  # overloaded server: move to the next mirror
+                    print("tile %s,%s via %s failed: %s" % (s, w, url.split("/")[2], ex), file=sys.stderr)
+                    time.sleep(pause)
+            if js is None:
+                raise SystemExit("tile %s,%s failed on every mirror; rerun to resume" % (s, w))
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(js, f)
         for el in js.get("elements", []):
             seen[el.get("id")] = el
     return {"elements": list(seen.values())}
