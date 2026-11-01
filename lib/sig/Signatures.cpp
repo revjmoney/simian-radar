@@ -55,6 +55,9 @@ BleKind classifyBle(const BleAdv& a) {
         break;
     }
   }
+  // Google Find My Device network accessories: Eddystone service data, FMDN frame types 0x40/0x41.
+  if (a.sdUuid == 0xFEAA && a.sd && a.sdLen >= 1 && (a.sd[0] == 0x40 || a.sd[0] == 0x41))
+    return BleKind::GoogleFmdn;
   if (hasSvc(a, 0xFEEC, 0xFEED)) return BleKind::Tile;
   if (hasSvc(a, 0xFD5A, 0xFD5A)) return BleKind::SmartTag;
   if (hasSvc(a, kRavenSvcLo, kRavenSvcHi)) return BleKind::Flock;
@@ -67,6 +70,10 @@ bool trackerKey(const BleAdv& a, BleKind k, uint8_t out[8]) {
   // Separated Find My adverts carry a public-key fragment that stays put while the address rotates.
   if (k == BleKind::FindMySeparated && a.mfg && a.mfgLen >= 13) {
     memcpy(out, a.mfg + 5, 8);
+    return true;
+  }
+  if (k == BleKind::GoogleFmdn && a.sd && a.sdLen >= 9) {  // ephemeral ID, rotates ~17 min
+    memcpy(out, a.sd + 1, 8);
     return true;
   }
   memcpy(out, a.addr, 6);
@@ -93,6 +100,7 @@ const char* bleLabel(BleKind k) {
     case BleKind::Tile: return "TILE";
     case BleKind::SmartTag: return "SMARTTAG";
     case BleKind::Flock: return "FLOCK";
+    case BleKind::GoogleFmdn: return "GOOGLE TAG";
     default: return "";
   }
 }

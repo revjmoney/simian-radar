@@ -45,12 +45,17 @@ void AppLogic::onButton(BtnEvent e, float holdFraction, uint32_t nowMs) {
       if (!dismissTop()) mode_ = (Mode)(((int)mode_ + 1) % (int)Mode::Count);
       break;
     case BtnEvent::HoldProgress:
+      // When the button went down, worked back from how full the bar is.
+      holdStartMs_ = nowMs - (uint32_t)(kShortPressMaxMs + holdFraction * (kHoldMarkMs - kShortPressMaxMs));
       progressMs_ = nowMs;
       holdFraction_ = holdFraction;
       break;
     case BtnEvent::HoldDone: {
+      bool holdBeganFirst = progressMs_ && (int32_t)(trackerSinceMs_ - holdStartMs_) > 0;
       progressMs_ = 0;
-      if (trackerOn_) {  // "that one's mine": stop alerting on this tracker
+      // "That one's mine" only when the alert was already up before the hold began; an alert that
+      // pops up mid-hold must not be dismissed by a hold meant for something else.
+      if (trackerOn_ && !holdBeganFirst) {
         if (ignoreCb_) ignoreCb_(tracker_.key);
         trackerOn_ = false;
         break;
@@ -88,6 +93,7 @@ void AppLogic::onFollow(const FollowAlert& a, uint32_t nowMs) {
   now_ = nowMs;
   tracker_ = a;
   trackerOn_ = true;
+  trackerSinceMs_ = nowMs;
 }
 
 void AppLogic::onGlasses(BleKind k, int8_t rssi, const uint8_t key[8], uint32_t nowMs) {
@@ -216,7 +222,7 @@ Overlay AppLogic::overlay() const {
   if (active(glassesUntil_)) return Overlay::GlassesToast;
   if (mode_ == Mode::Cam) {
     if (!hasFix()) return Overlay::WaitingGps;
-    if (!db_.isOpen()) return Overlay::NoCamData;
+    if (!db_.isOpen() || db_.count() == 0) return Overlay::NoCamData;
   }
   return Overlay::None;
 }

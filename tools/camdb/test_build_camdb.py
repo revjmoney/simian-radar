@@ -108,3 +108,15 @@ def test_download_deflock_keeps_us_only():
     assert [e["id"] for e in js["elements"]] == [1]
     assert js["elements"][0]["type"] == "node"
     assert not any("/40/0.json" in u for u in fetched)  # Europe tile never fetched
+
+
+def test_main_refuses_tiny_database(tmp_path):
+    src = tmp_path / "few.json"
+    src.write_text('{"elements": [{"type": "node", "lat": 1.0, "lon": 2.0, "tags": {}}]}')
+    out = tmp_path / "db.bin"
+    import pytest
+    with pytest.raises(SystemExit):
+        b.main(["--out", str(out), "--from-json", str(src)])
+    assert not out.exists()
+    b.main(["--out", str(out), "--from-json", str(src), "--allow-small"])
+    assert out.exists()

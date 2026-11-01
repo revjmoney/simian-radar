@@ -21,6 +21,5 @@ bool LittleFsMarkIO::save(const uint8_t* buf, size_t len) {
   bool ok = f.write(buf, len) == len;
   f.close();
   if (!ok) return false;
-  LittleFS.remove(kPath);
-  return LittleFS.rename(kTmp, kPath);
+  return LittleFS.rename(kTmp, kPath);  // replaces marks.bin in one step
 }

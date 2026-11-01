@@ -5,7 +5,8 @@
 static const uint32_t kForgetMs = 5UL * 60UL * 1000UL;
 
 static bool tracked(BleKind k) {
-  return k == BleKind::FindMySeparated || k == BleKind::Tile || k == BleKind::SmartTag;
+  return k == BleKind::FindMySeparated || k == BleKind::Tile || k == BleKind::SmartTag ||
+         k == BleKind::GoogleFmdn;
 }
 
 bool FollowDetector::isIgnored(const uint8_t key[8]) const {

@@ -308,6 +308,38 @@ void test_toast_shows_3s() {
   OVERLAY(None);
 }
 
+void test_empty_db_shows_no_cam_data() {
+  uint8_t hdr[36] = {'S', 'R', 'D', 'B', 1, 0, 4, 0};
+  CamDb empty;
+  TEST_ASSERT_TRUE(empty.open(hdr, sizeof hdr));
+  AppLogic a2(empty, *marks);
+  Fix f = {true, kLat, kLon, 0, 0, 9, 1};
+  a2.onFix(f, 1000);
+  a2.tick(1000);
+  TEST_ASSERT_EQUAL_INT((int)Overlay::NoCamData, (int)a2.overlay());
+}
+void test_tracker_arriving_mid_hold_is_not_ignored() {
+  at(kFarLat, kFarLon, 1000);
+  app->onButton(BtnEvent::HoldProgress, 0.1f, 2000);  // hold started before the alert
+  FollowAlert a = {{4, 4, 4, 4, 4, 4, 4, 4}, BleKind::FindMySeparated, -60};
+  app->onFollow(a, 3000);
+  app->onButton(BtnEvent::HoldProgress, 0.6f, 4000);
+  at(kFarLat, kFarLon, 5000);
+  hold(5000);
+  TEST_ASSERT_EQUAL_INT(0, ignoredCalls);
+  OVERLAY(TrackerFollowing);
+  TEST_ASSERT_EQUAL_UINT(1, marks->count());  // the hold still made its mark
+}
+void test_timers_survive_millis_wrap() {
+  app->onToast("WRAP", 0xFFFFFC00u);
+  app->tick(0xFFFFFE00u);  // 0.5 s later, still before the wrap; the end time already wrapped
+  OVERLAY(Toast);
+  app->tick(0x00000400u);  // 2 s later, after the wrap
+  OVERLAY(Toast);
+  app->tick(0x00000C00u);  // 4 s later
+  TEST_ASSERT_TRUE(app->overlay() != Overlay::Toast);
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_mode_cycles_cam_wifi_bt);
@@ -339,5 +371,8 @@ int main() {
   RUN_TEST(test_mode_cycles_all_16_and_wraps);
   RUN_TEST(test_sub_ghz_modes_flagged);
   RUN_TEST(test_toast_shows_3s);
+  RUN_TEST(test_empty_db_shows_no_cam_data);
+  RUN_TEST(test_tracker_arriving_mid_hold_is_not_ignored);
+  RUN_TEST(test_timers_survive_millis_wrap);
   return UNITY_END();
 }

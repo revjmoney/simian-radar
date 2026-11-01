@@ -105,6 +105,14 @@ void test_no_fix_does_not_start_distance() {
   TEST_ASSERT_FALSE(f.poll(11 * MIN, &a));
 }
 
+void test_google_tag_tracked() {
+  FollowDetector f;
+  uint8_t k[8]; key(k, 11);
+  ride(f, k, BleKind::GoogleFmdn, 11, kHalfMileLat / 10);
+  FollowAlert a;
+  TEST_ASSERT_TRUE(f.poll(11 * MIN, &a));
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_alerts_after_10min_and_half_mile);
@@ -118,5 +126,6 @@ int main() {
   RUN_TEST(test_table_caps_at_64);
   RUN_TEST(test_unseen_5min_dropped);
   RUN_TEST(test_no_fix_does_not_start_distance);
+  RUN_TEST(test_google_tag_tracked);
   return UNITY_END();
 }

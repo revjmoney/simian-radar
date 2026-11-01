@@ -2,7 +2,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-enum class BleKind { Other, GlassesMeta, GlassesSnap, FindMySeparated, FindMyNearOwner, Tile, SmartTag, Flock };
+enum class BleKind { Other, GlassesMeta, GlassesSnap, FindMySeparated, FindMyNearOwner, Tile, SmartTag, Flock,
+                     GoogleFmdn };
 
 struct BleAdv {
   uint8_t addr[6];
@@ -12,6 +13,9 @@ struct BleAdv {
   const uint16_t* svc16;    // 16-bit service UUIDs
   size_t svc16Count;
   const char* name;         // may be null
+  uint16_t sdUuid;          // first 16-bit service data UUID (0 if none)
+  const uint8_t* sd;        // its data, after the UUID
+  size_t sdLen;
 };
 
 BleKind classifyBle(const BleAdv& a);

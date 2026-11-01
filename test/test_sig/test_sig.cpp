@@ -113,6 +113,23 @@ void test_labels() {
   TEST_ASSERT_EQUAL_STRING("", bleLabel(BleKind::Other));
 }
 
+void test_google_fmdn_tag() {
+  const uint8_t sd[] = {0x41, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+  BleAdv a = adv(nullptr, 0);
+  a.sdUuid = 0xFEAA; a.sd = sd; a.sdLen = sizeof sd;
+  TEST_ASSERT_EQUAL_INT((int)BleKind::GoogleFmdn, (int)classifyBle(a));
+  TEST_ASSERT_EQUAL_STRING("GOOGLE TAG", bleLabel(BleKind::GoogleFmdn));
+  uint8_t k[8];
+  trackerKey(a, BleKind::GoogleFmdn, k);
+  TEST_ASSERT_EQUAL_UINT8(1, k[0]);
+}
+void test_eddystone_url_not_tag() {
+  const uint8_t sd[] = {0x10, 0, 0};
+  BleAdv a = adv(nullptr, 0);
+  a.sdUuid = 0xFEAA; a.sd = sd; a.sdLen = sizeof sd;
+  TEST_ASSERT_EQUAL_INT((int)BleKind::Other, (int)classifyBle(a));
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_meta_glasses);
@@ -134,5 +151,7 @@ int main() {
   RUN_TEST(test_tracker_key_stable_across_addresses);
   RUN_TEST(test_tracker_key_tile_uses_address);
   RUN_TEST(test_labels);
+  RUN_TEST(test_google_fmdn_tag);
+  RUN_TEST(test_eddystone_url_not_tag);
   return UNITY_END();
 }

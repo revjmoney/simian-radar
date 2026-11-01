@@ -77,6 +77,7 @@ class AppLogic {
   AddResult markResult_ = AddResult::Ok;
 
   bool trackerOn_ = false;
+  uint32_t trackerSinceMs_ = 0, holdStartMs_ = 0;
   FollowAlert tracker_ = {};
 
   struct Glasses { uint8_t key[8]; uint32_t toastedMs; };
@@ -88,7 +89,7 @@ class AppLogic {
   char toastText_[24] = "";
   uint32_t toastUntil_ = 0;
 
-  bool active(uint32_t until) const { return until && now_ < until; }
+  bool active(uint32_t until) const { return until && (int32_t)(until - now_) > 0; }  // wrap-safe
   bool dismissTop();
   void refreshRows();
   CamRow toCamRow(const Row& r) const;

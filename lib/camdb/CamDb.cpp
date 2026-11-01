@@ -1,5 +1,7 @@
 #include "CamDb.h"
 #include <math.h>
+#include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #include "Geo.h"
 
@@ -64,6 +66,11 @@ size_t CamDb::nearest(double lat, double lon, float maxM, NearCam* out, size_t m
                       uint32_t* withinCount) const {
   size_t n = 0;
   uint32_t within = 0;
+  // Cheap integer box test before the double-precision distance (the S3 has no double FPU).
+  const int32_t latBox = (int32_t)(maxM / 111195.0 * 1e7) + 1;
+  double coslat = cos(lat * M_PI / 180.0);
+  const int32_t lonBox = coslat > 0.01 ? (int32_t)(latBox / coslat) + 1 : INT32_MAX;
+  const int32_t latE7 = (int32_t)lround(lat * 1e7), lonE7 = (int32_t)lround(lon * 1e7);
   if (data_ && rows_ && cols_) {
     long r0 = (long)floor((lat - lat0_) * q_), c0 = (long)floor((lon - lon0_) * q_);
     for (long r = r0 - 1; r <= r0 + 1; r++) {
@@ -73,6 +80,7 @@ size_t CamDb::nearest(double lat, double lon, float maxM, NearCam* out, size_t m
         size_t cell = (size_t)r * cols_ + c;
         for (uint32_t i = idx(cell); i < idx(cell + 1); i++) {
           CamRec cr = rec(i);
+          if (llabs((int64_t)cr.latE7 - latE7) > latBox || llabs((int64_t)cr.lonE7 - lonE7) > lonBox) continue;
           double clat = cr.latE7 / 1e7, clon = cr.lonE7 / 1e7;
           float d = (float)haversineM(lat, lon, clat, clon);
           if (d > maxM) continue;

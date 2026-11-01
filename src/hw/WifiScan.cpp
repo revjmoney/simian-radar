@@ -34,6 +34,7 @@ static void record(const uint8_t* mac, const char* ssid, int8_t rssi, uint8_t ch
     }
     if (!slot) {
       slot = oldest;
+      memset(slot, 0, sizeof *slot);  // don't inherit the previous occupant's Flock flag
       slot->used = true;
       memcpy(slot->info.bssid, mac, 6);
     }

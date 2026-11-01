@@ -31,7 +31,7 @@ bool gpsPoll(Fix* out) {
   while (Serial1.available()) gps.encode(Serial1.read());
   out->sats = gps.satellites.isValid() ? gps.satellites.value() : 0;
   out->valid = gps.location.isValid() && gps.location.age() < 2000;
-  if (!out->valid) return false;
+  if (!out->valid || !gps.location.isUpdated()) return false;  // report each new fix once (~1 Hz)
   out->lat = gps.location.lat();
   out->lon = gps.location.lng();
   out->speedMps = gps.speed.isValid() ? (float)gps.speed.mps() : 0;

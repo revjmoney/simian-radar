@@ -18,6 +18,7 @@ MAGIC = b"SRDB"
 VERSION = 1
 CELLS_PER_DEG = 4
 NO_DIRECTION = 0xFFFF
+MIN_CAMERAS = 10000
 HEADER = "<4sHHhhHHII8x"
 
 BRANDS = [
@@ -189,6 +190,8 @@ def main(argv=None):
     ap.add_argument("--source", choices=["deflock", "overpass"], default="deflock",
                     help="deflock: DeFlock's daily CDN copy of the OSM data (fast); overpass: query OSM")
     ap.add_argument("--save-json", help="also save the downloaded Overpass JSON here")
+    ap.add_argument("--allow-small", action="store_true",
+                    help="write the database even if it has fewer than %d cameras" % MIN_CAMERAS)
     args = ap.parse_args(argv)
     if args.from_json:
         with open(args.from_json, encoding="utf-8") as f:
@@ -199,6 +202,9 @@ def main(argv=None):
             with open(args.save_json, "w", encoding="utf-8") as f:
                 json.dump(js, f)
     cameras = parse_overpass(js)
+    if len(cameras) < MIN_CAMERAS and not args.allow_small:
+        # An empty or tiny download would flash a database that looks like "no cameras around".
+        raise SystemExit("only %d cameras; refusing to write (use --allow-small for test data)" % len(cameras))
     data = pack(cameras)
     with open(args.out, "wb") as f:
         f.write(data)
