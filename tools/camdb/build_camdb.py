@@ -1,0 +1,155 @@
+"""Build the Simian Radar camera database (camdb.bin) from OpenStreetMap ALPR nodes.
+
+Format (little-endian), shared with lib/camdb/CamDb.cpp:
+  header 32 bytes: magic "SRDB", u16 version, u16 cells per degree, i16 lat0, i16 lon0,
+                   u16 rows, u16 cols, u32 count, u32 built_unix, 8 reserved bytes
+  index: (rows*cols + 1) x u32 record start offsets
+  records, sorted by cell: i32 lat_e7, i32 lon_e7, u16 direction (0xFFFF unknown), u8 brand, u8 flags
+"""
+import argparse
+import json
+import math
+import re
+import struct
+import sys
+import time
+
+MAGIC = b"SRDB"
+VERSION = 1
+CELLS_PER_DEG = 4
+NO_DIRECTION = 0xFFFF
+HEADER = "<4sHHhhHHII8x"
+
+BRANDS = [
+    (1, ("flock",)),
+    (2, ("motorola", "vigilant")),
+    (3, ("genetec",)),
+    (4, ("axon",)),
+    (5, ("leonardo", "elsag")),
+    (6, ("rekor",)),
+    (7, ("verkada",)),
+    (8, ("neology",)),
+]
+
+# Lower 48, Alaska, Hawaii as (south, west, north, east); split into 5 x 5 degree tiles.
+US_BOXES = [(24, -125, 50, -66), (51, -170, 72, -129), (18, -161, 23, -154)]
+OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+USER_AGENT = "SimianRadar/0.1"
+
+
+def brand_code(manufacturer):
+    if not manufacturer:
+        return 0
+    m = manufacturer.lower()
+    for code, needles in BRANDS:
+        if any(n in m for n in needles):
+            return code
+    return 0
+
+
+def _direction(tags):
+    raw = tags.get("camera:direction") or tags.get("direction")
+    if not raw:
+        return None
+    m = re.match(r"\s*(\d+(?:\.\d+)?)", raw)
+    return int(float(m.group(1))) % 360 if m else None
+
+
+def parse_overpass(js):
+    out = []
+    for el in js.get("elements", []):
+        if el.get("type") != "node":
+            continue
+        tags = el.get("tags", {})
+        out.append({"lat": el["lat"], "lon": el["lon"], "direction": _direction(tags),
+                    "manufacturer": tags.get("manufacturer")})
+    return out
+
+
+def pack(cameras, built_unix=None):
+    q = CELLS_PER_DEG
+    if cameras:
+        lat0 = math.floor(min(c["lat"] for c in cameras))
+        lon0 = math.floor(min(c["lon"] for c in cameras))
+        rows = int((max(c["lat"] for c in cameras) - lat0) * q) + 1
+        cols = int((max(c["lon"] for c in cameras) - lon0) * q) + 1
+    else:
+        lat0 = lon0 = rows = cols = 0
+
+    def cell(c):
+        lat_e7, lon_e7 = round(c["lat"] * 1e7), round(c["lon"] * 1e7)
+        # Bucket from the stored integer coordinates so the reader computes the same cell.
+        r = int((lat_e7 / 1e7 - lat0) * q)
+        col = int((lon_e7 / 1e7 - lon0) * q)
+        return r * cols + col
+
+    ordered = sorted(cameras, key=cell)
+    index = [0] * (rows * cols + 1)
+    for c in ordered:
+        index[cell(c) + 1] += 1
+    for i in range(1, len(index)):
+        index[i] += index[i - 1]
+
+    out = bytearray(struct.pack(HEADER, MAGIC, VERSION, q, lat0, lon0, rows, cols, len(ordered),
+                                int(built_unix if built_unix is not None else time.time())))
+    out += struct.pack("<%dI" % len(index), *index)
+    for c in ordered:
+        d = c["direction"]
+        out += struct.pack("<iiHBB", round(c["lat"] * 1e7), round(c["lon"] * 1e7),
+                           NO_DIRECTION if d is None else d, brand_code(c["manufacturer"]), 0)
+    return bytes(out)
+
+
+def _tiles():
+    for s, w, n, e in US_BOXES:
+        for lat in range(s, n, 5):
+            for lon in range(w, e, 5):
+                yield lat, lon, min(lat + 5, n), min(lon + 5, e)
+
+
+def download():
+    import requests
+
+    seen = {}
+    for s, w, n, e in _tiles():
+        query = '[out:json][timeout:120];node["surveillance:type"="ALPR"](%s,%s,%s,%s);out;' % (s, w, n, e)
+        for attempt in range(3):
+            try:
+                r = requests.post(OVERPASS_URL, data={"data": query},
+                                  headers={"User-Agent": USER_AGENT}, timeout=180)
+                r.raise_for_status()
+                js = r.json()
+                break
+            except Exception as ex:  # network or server hiccup: retry the tile
+                print("tile %s,%s attempt %d failed: %s" % (s, w, attempt + 1, ex), file=sys.stderr)
+                time.sleep(10 * (attempt + 1))
+        else:
+            raise SystemExit("tile %s,%s failed 3 times" % (s, w))
+        for el in js.get("elements", []):
+            seen[el.get("id")] = el
+    return {"elements": list(seen.values())}
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--out", required=True)
+    ap.add_argument("--from-json", help="Overpass JSON file instead of downloading")
+    ap.add_argument("--save-json", help="also save the downloaded Overpass JSON here")
+    args = ap.parse_args(argv)
+    if args.from_json:
+        with open(args.from_json, encoding="utf-8") as f:
+            js = json.load(f)
+    else:
+        js = download()
+        if args.save_json:
+            with open(args.save_json, "w", encoding="utf-8") as f:
+                json.dump(js, f)
+    cameras = parse_overpass(js)
+    data = pack(cameras)
+    with open(args.out, "wb") as f:
+        f.write(data)
+    print("%d cameras, %d bytes -> %s" % (len(cameras), len(data), args.out))
+
+
+if __name__ == "__main__":
+    main()

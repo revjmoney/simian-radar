@@ -1,0 +1,8 @@
+{"elements": [
+ {"type": "node", "id": 1, "lat": 33.690547, "lon": -78.8867, "tags": {"manufacturer": "Flock Safety", "direction": "90"}},
+ {"type": "node", "id": 2, "lat": 33.697784, "lon": -78.8867, "tags": {"manufacturer": "Flock Safety"}},
+ {"type": "node", "id": 3, "lat": 33.7505, "lon": -78.8867, "tags": {}},
+ {"type": "node", "id": 4, "lat": 33.77594, "lon": -78.8867, "tags": {"manufacturer": "Flock Safety"}},
+ {"type": "node", "id": 5, "lat": 61.2181, "lon": -149.9003, "tags": {"manufacturer": "Flock Safety"}},
+ {"type": "node", "id": 6, "lat": 33.6891, "lon": -78.9000, "tags": {"manufacturer": "Motorola Solutions"}}
+]}
