@@ -240,16 +240,112 @@ static void drawOverlay(Canvas& d, const AppLogic& app, Overlay o, uint32_t camC
   d.setDrawColor(1);
 }
 
-void drawFrame(Canvas& d, const AppLogic& app, const ApInfo* aps, size_t nAps, const BleSeen* ble,
-               size_t nBle, uint8_t sats, float vbat, uint32_t camCount, size_t markCount) {
+static void footer(Canvas& d, const char* text) {
+  d.drawHLine(0, 115, W);
+  d.setFont(u8g2_font_4x6_tr);
+  center(d, 124, text);
+}
+
+static void rowList(Canvas& d, const ScreenData& s) {
+  d.setFont(u8g2_font_5x7_tr);
+  if (!s.nRows) center(d, 60, "listening...");
+  for (size_t i = 0; i < s.nRows && i < 7; i++) {
+    if (s.rowBars) {
+      listRow(d, i, s.rowFlagAll, s.rows[i].text, s.rows[i].rssi, 0);
+    } else {
+      int y = 13 + (int)i * 14;
+      if (s.rowFlagAll) { d.drawBox(0, y - 1, W, 13); d.setDrawColor(0); }
+      d.drawStr(1, y + 8, s.rows[i].text);
+      d.setDrawColor(1);
+    }
+  }
+  footer(d, s.footer);
+}
+
+// Vertical bars bottom-aligned at y = 112, height 0-96 px.
+static void bar(Canvas& d, int x, int w, float frac) {
+  if (frac < 0) frac = 0;
+  if (frac > 1) frac = 1;
+  int h = (int)lroundf(96 * frac);
+  if (h) d.drawBox(x, 112 - h, w, h);
+}
+
+static void chanGraph(Canvas& d, const ScreenData& s) {
+  float top = 1;
+  for (int i = 0; i < 11; i++) if (s.chan && s.chan[i] > top) top = s.chan[i];
+  for (int i = 0; i < 11; i++) bar(d, 2 + i * 5 + (i > 5 ? 2 : 0), 4, s.chan ? s.chan[i] / top : 0);
+  d.setFont(u8g2_font_4x6_tr);
+  d.drawStr(2, 120, "1");
+  d.drawStr(27, 120, "6");
+  d.drawStr(54, 120, "11");
+  char t[20];
+  snprintf(t, sizeof t, "peak %.0f/s", top);
+  d.drawStr(18, 127, t);
+}
+
+static void sweepGraph(Canvas& d, const ScreenData& s) {
+  for (int b = 0; b < SweepStats::kBins && s.sweep; b++) {
+    bar(d, 6 + b, 1, (s.sweep->level(b) + 120) / 80.0f);  // -120 dBm empty, -40 dBm full
+    float pk = (s.sweep->peak(b) + 120) / 80.0f;
+    if (pk > 0) d.drawBox(6 + b, 112 - (int)lroundf(96 * (pk > 1 ? 1 : pk)), 1, 1);
+  }
+  d.setFont(u8g2_font_4x6_tr);
+  d.drawStr(2, 120, "902");
+  d.drawStr(26, 120, "915");
+  d.drawStr(50, 120, "928");
+  if (s.rfid) {
+    d.drawBox(0, 12, W, 9);
+    d.setDrawColor(0);
+    center(d, 19, "RFID/TOLL READER?");
+    d.setDrawColor(1);
+  }
+}
+
+static void skyView(Canvas& d, const AppLogic& app, const ScreenData& s) {
+  size_t n = s.nSats < 12 ? s.nSats : 12;
+  for (size_t i = 0; i < n; i++) {
+    int x = 2 + (int)i * 5;
+    float frac = s.sats[i].snr / 50.0f;
+    if (frac > 1) frac = 1;
+    int h = (int)lroundf(44 * frac);
+    if (h) d.drawBox(x, 60 - h, 4, h);
+    else d.drawHLine(x, 59, 4);
+  }
+  d.setFont(u8g2_font_4x6_tr);
+  char t[24];
+  snprintf(t, sizeof t, "%u sats heard", (unsigned)s.nSats);
+  d.drawStr(1, 68, t);
+  d.drawHLine(0, 71, W);
+  const Fix& f = app.fix();
+  d.setFont(u8g2_font_5x7_tr);
+  d.drawStr(1, 81, app.hasFix() ? "FIX 3D" : "NO FIX");
+  snprintf(t, sizeof t, "HDOP %.1f", s.hdop);
+  d.drawStr(1, 90, t);
+  snprintf(t, sizeof t, "ALT %.0fm", s.altM);
+  d.drawStr(1, 99, t);
+  snprintf(t, sizeof t, "%.0f mph", app.hasFix() ? f.speedMps * 2.23694f : 0.0f);
+  d.drawStr(1, 108, t);
+  uint32_t u = f.unixTime;
+  if (u) snprintf(t, sizeof t, "%02lu:%02lu:%02lu UTC", (unsigned long)(u / 3600 % 24), (unsigned long)(u / 60 % 60),
+                  (unsigned long)(u % 60));
+  else snprintf(t, sizeof t, "--:--:-- UTC");
+  footer(d, t);
+}
+
+void drawFrame(Canvas& d, const AppLogic& app, const ScreenData& s) {
   Overlay o = app.overlay();
   bool fullScreen = o == Overlay::CameraAhead || o == Overlay::TrackerFollowing;
-  const char* tag = modeTag(app.mode());
-  if (!fullScreen) topStrip(d, tag, sats, vbat);
+  if (!fullScreen) topStrip(d, modeTag(app.mode()), s.satCount, s.vbat);
   if (o == Overlay::None || o == Overlay::GlassesToast || o == Overlay::Toast) {
-    if (app.mode() == Mode::Cam) camList(d, app);
-    else if (app.mode() == Mode::Wifi) wifiList(d, aps, nAps);
-    else bleList(d, ble, nBle);
+    switch (app.mode()) {
+      case Mode::Cam: camList(d, app); break;
+      case Mode::Wifi: wifiList(d, s.aps, s.nAps); break;
+      case Mode::Bt: bleList(d, s.ble, s.nBle); break;
+      case Mode::Chan: chanGraph(d, s); break;
+      case Mode::Sweep: sweepGraph(d, s); break;
+      case Mode::Sky: skyView(d, app, s); break;
+      default: rowList(d, s); break;
+    }
   }
-  if (o != Overlay::None) drawOverlay(d, app, o, camCount, markCount);
+  if (o != Overlay::None) drawOverlay(d, app, o, s.camCount, s.markCount);
 }

@@ -29,7 +29,7 @@ void FollowDetector::observe(const uint8_t key[8], BleKind k, int8_t rssi, uint3
   for (auto& x : entries_) {
     if (x.used && memcmp(x.key, key, 8) == 0) { e = &x; break; }
     if (!x.used) { if (oldest->used) oldest = &x; }
-    else if (oldest->used && x.lastMs < oldest->lastMs) oldest = &x;
+    else if (oldest->used && (int32_t)(x.lastMs - oldest->lastMs) < 0) oldest = &x;
   }
   if (!e) {
     e = oldest;  // a free slot, or the least recently seen one when the table is full

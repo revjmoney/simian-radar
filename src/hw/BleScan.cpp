@@ -14,6 +14,9 @@ struct RawAdv {
   uint8_t nSvc;
   uint16_t svc16[4];
   char name[20];
+  uint16_t sdUuid;
+  uint8_t sdLen;
+  uint8_t sd[27];
 };
 
 struct SeenSlot { BleSeen s; uint32_t lastMs; bool used; };
@@ -23,7 +26,8 @@ static QueueHandle_t queue;
 class Callbacks : public NimBLEAdvertisedDeviceCallbacks {
   void onResult(NimBLEAdvertisedDevice* d) override {
     RawAdv r = {};
-    memcpy(r.addr, d->getAddress().getNative(), 6);
+    const uint8_t* native = d->getAddress().getNative();  // least significant byte first
+    for (int i = 0; i < 6; i++) r.addr[i] = native[5 - i];  // store as printed: OUI first
     r.rssi = (int8_t)d->getRSSI();
     std::string m = d->getManufacturerData();
     r.mfgLen = (uint8_t)(m.size() < sizeof r.mfg ? m.size() : sizeof r.mfg);
@@ -31,6 +35,15 @@ class Callbacks : public NimBLEAdvertisedDeviceCallbacks {
     for (int i = 0; i < (int)d->getServiceUUIDCount() && r.nSvc < 4; i++) {
       NimBLEUUID u = d->getServiceUUID(i);
       if (u.bitSize() == 16) r.svc16[r.nSvc++] = u.getNative()->u16.value;
+    }
+    for (int i = 0; i < (int)d->getServiceDataCount(); i++) {
+      NimBLEUUID u = d->getServiceDataUUID(i);
+      if (u.bitSize() != 16) continue;
+      std::string sd = d->getServiceData(i);
+      r.sdUuid = u.getNative()->u16.value;
+      r.sdLen = (uint8_t)(sd.size() < sizeof r.sd ? sd.size() : sizeof r.sd);
+      memcpy(r.sd, sd.data(), r.sdLen);
+      break;
     }
     std::string n = d->getName();
     strncpy(r.name, n.c_str(), sizeof r.name - 1);
@@ -57,10 +70,11 @@ static void remember(const BleAdv& a, BleKind k, const uint8_t key[8], uint32_t 
   for (auto& x : seen) {
     if (x.used && memcmp(x.s.key, key, 8) == 0) { slot = &x; break; }
     if (!x.used) oldest = &x;
-    else if (oldest->used && x.lastMs < oldest->lastMs) oldest = &x;
+    else if (oldest->used && (int32_t)(x.lastMs - oldest->lastMs) < 0) oldest = &x;
   }
   if (!slot) {
     slot = oldest;
+    memset(slot, 0, sizeof *slot);
     slot->used = true;
     memcpy(slot->s.key, key, 8);
   }
@@ -76,7 +90,7 @@ static void remember(const BleAdv& a, BleKind k, const uint8_t key[8], uint32_t 
 void blePoll(void (*cb)(const BleAdv& adv, BleKind kind, const uint8_t key[8]), uint32_t nowMs) {
   RawAdv r;
   while (xQueueReceive(queue, &r, 0) == pdTRUE) {
-    BleAdv a = {{0}, r.rssi, r.mfg, r.mfgLen, r.svc16, r.nSvc, r.name};
+    BleAdv a = {{0}, r.rssi, r.mfg, r.mfgLen, r.svc16, r.nSvc, r.name, r.sdUuid, r.sdLen ? r.sd : nullptr, r.sdLen};
     memcpy(a.addr, r.addr, 6);
     BleKind k = classifyBle(a);
     uint8_t key[8];
