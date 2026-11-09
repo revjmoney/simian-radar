@@ -11,6 +11,7 @@
 ![PlatformIO](https://img.shields.io/badge/built%20with-PlatformIO-f5822a?style=for-the-badge&logo=platformio&logoColor=white)
 ![Tests](https://img.shields.io/badge/host%20tests-188%20passing-00e6a0?style=for-the-badge)
 ![Listen only](https://img.shields.io/badge/transmit-never-c0392b?style=for-the-badge)
+![License](https://img.shields.io/badge/license-GPLv3-blue?style=for-the-badge)
 
 </div>
 
@@ -225,6 +226,8 @@ Check the laws where you live before scanning, and respect other people's privac
 ---
 
 ## Credits and licenses
+
+Simian Radar is released under the [GNU General Public License v3.0](LICENSE).
 
 - Camera data **© OpenStreetMap contributors**, available under the
   [ODbL](https://opendatacommons.org/licenses/odbl/). Tiles served by [DeFlock](https://deflock.me).
