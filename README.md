@@ -108,7 +108,7 @@ utility meters, cellular.
 | Action | Result |
 |--------|--------|
 | **Tap** | Next mode. A full-screen banner (`3/16 PHONES`) shows where you are. |
-| **Hold 5 seconds** | **Mark a camera** at your current GPS position. Works in any mode, needs a fix. Marks survive reboots. |
+| **Hold 5 seconds** | **Mark a camera** at your current GPS position. Works in any mode, needs a fix. Marks are saved to flash. |
 
 ### On the road
 
@@ -204,7 +204,8 @@ partitions.csv  16 MB layout with the raw camdb partition at 0x710000
 ## Roadmap
 
 - [x] **Phase 1:** standalone firmware. GPS, offline camera DB, 16 modes, alerts, camera marks.
-- [ ] Outdoor GPS fix and drive test of CAMERA AHEAD; on-air checks of the 900 MHz decoders.
+- [ ] Outdoor GPS fix, drive test of CAMERA AHEAD, bench test of marks across a reboot, on-air checks
+      of the 900 MHz decoders.
 - [ ] **Phase 2:** MeshCore mesh. A private "Simian Radar" channel for chat and camera reports only.
       **Never shares anyone's position**, no periodic adverts, rotating BLE address.
 - [ ] **Phase 3:** Android app. Chat tab and marks tab; you submit your own marks to OpenStreetMap
