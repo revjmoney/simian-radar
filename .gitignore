@@ -6,3 +6,6 @@ __pycache__/
 .superpowers/
 backups/
 build/
+
+# raw OLED contact sheets (may show nearby network names)
+docs/screens-*.png
