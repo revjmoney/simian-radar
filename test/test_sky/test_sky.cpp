@@ -40,7 +40,7 @@ static void sats(SkyGuard& g, uint8_t snr, uint32_t now) {
   for (int i = 0; i < 6; i++) s[i] = {(uint8_t)(i + 1), 'G', snr};
   g.onSats(s, 6, now);
 }
-static Fix fixAt(double lat, double lon, uint32_t unix) { return {true, lat, lon, 20, 0, 8, unix}; }
+static Fix fixAt(double lat, double lon, uint32_t unixTime) { return {true, lat, lon, 20, 0, 8, unixTime}; }
 
 void test_jamming_when_strong_sats_drop() {
   SkyGuard g;

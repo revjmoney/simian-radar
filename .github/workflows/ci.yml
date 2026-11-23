@@ -72,10 +72,6 @@ jobs:
       - name: Install PlatformIO
         run: pip install platformio
       - name: Run tests
-        # Linux g++ predefines the macro "unix" under gnu++17 (MinGW on Windows does not),
-        # and test_sky.cpp uses it as a parameter name, so undefine it here.
-        env:
-          PLATFORMIO_BUILD_FLAGS: -Uunix
         run: pio test -e native
 
   python:
