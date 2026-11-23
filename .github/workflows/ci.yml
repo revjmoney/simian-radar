@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    name: Private data check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Look for home IPs, emails, tokens, keys and private project names
+        run: |
+          fail=0
+          if git grep -n -I -E '192\.168\.1\.[0-9]+|myemail937|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|PRIVATE KEY-----' -- . ':!.github/workflows/ci.yml' ':!*.png'; then
+            echo "::error::private data found (lines above)"
+            fail=1
+          fi
+          if git grep -n -I -i -E 'rose engine|guilloche|gen-rose' -- . ':!.github/workflows/ci.yml' ':!*.png'; then
+            echo "::error::private project name found (lines above)"
+            fail=1
+          fi
+          exit $fail
+
+  firmware:
+    name: Firmware (heltec_v4)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: |
+            pio-${{ runner.os }}-
+      - name: Install PlatformIO
+        run: pip install platformio
+      - name: Build
+        run: pio run -e heltec_v4
+      - uses: actions/upload-artifact@v7
+        with:
+          name: simian-radar-firmware
+          path: .pio/build/heltec_v4/*.bin
+          retention-days: 30
+          if-no-files-found: error
+
+  native-tests:
+    name: Host tests (pio test -e native)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-native-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+      - name: Install PlatformIO
+        run: pip install platformio
+      - name: Run tests
+        run: pio test -e native
+
+  python:
+    name: Python tools
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install camdb requirements
+        run: pip install -r tools/camdb/requirements.txt
+      - name: Byte-compile tools
+        run: python -m compileall -q tools
+      - name: Camera DB tests
+        working-directory: tools/camdb
+        run: python -m pytest -q
